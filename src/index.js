@@ -516,29 +516,36 @@ _地址格式: 0x\\.\\.\\._`;
 async function handleWebhook(request, env) {
   try {
     const update = await request.json();
+    console.log('Received update:', JSON.stringify(update));
 
     // 处理消息
     const message = update.message;
     if (!message || !message.text) {
+      console.log('No message or text, skipping');
       return new Response('OK');
     }
 
     const chatId = message.chat.id;
     const text = message.text.trim();
+    console.log(`Message from ${chatId}: ${text}`);
 
     // 解析命令
     if (!text.startsWith('/')) {
+      console.log('Not a command, skipping');
       return new Response('OK');
     }
 
     const parts = text.split(/\s+/);
     const command = parts[0].split('@')[0].toLowerCase(); // 移除 @botname
     const args = parts.slice(1);
+    console.log(`Command: ${command}, args: ${args.join(', ')}`);
 
     const response = await handleCommand(command, args, chatId, env);
+    console.log(`Response: ${response ? response.substring(0, 100) : 'null'}`);
 
     if (response) {
-      await sendTelegram(env.TG_BOT_TOKEN, chatId, response);
+      const sent = await sendTelegram(env.TG_BOT_TOKEN, chatId, response);
+      console.log(`Telegram send result: ${sent}`);
     }
 
     return new Response('OK');
