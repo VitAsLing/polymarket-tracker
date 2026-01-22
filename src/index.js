@@ -47,7 +47,8 @@ function formatTimestamp(timestamp) {
 
 function escapeMarkdown(text) {
   if (!text) return '';
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+  // 旧版 Markdown 只需转义这几个字符
+  return text.replace(/[_*`\[]/g, '\\$&');
 }
 
 // ============ Polymarket API ============
@@ -292,18 +293,18 @@ async function handleCommand(command, args, chatId, env) {
       return `🤖 *Polymarket Tracker Bot*
 
 *订阅管理:*
-/subscribe <地址> \\[别名\\] \\- 订阅地址
-/unsubscribe <地址> \\- 取消订阅
-/list \\- 查看订阅列表
-/alias <地址> <新别名> \\- 修改别名
+/subscribe <地址> [别名] - 订阅地址
+/unsubscribe <地址> - 取消订阅
+/list - 查看订阅列表
+/alias <地址> <新别名> - 修改别名
 
 *查询数据:*
-/pos \\[地址/别名\\] \\- 当前持仓
-/pnl \\[地址/别名\\] \\- 已实现收益
-/value \\[地址/别名\\] \\- 持仓总价值
-/rank \\[地址/别名\\] \\- 排行榜排名
+/pos [地址/别名] - 当前持仓
+/pnl [地址/别名] - 已实现收益
+/value [地址/别名] - 持仓总价值
+/rank [地址/别名] - 排行榜排名
 
-_地址格式: 0x\\.\\.\\._`;
+_地址格式: 0x..._`;
 
     case '/subscribe': {
       if (!args[0]) {
@@ -376,7 +377,7 @@ _地址格式: 0x\\.\\.\\._`;
       let msg = '📋 *订阅列表:*\n\n';
       subscriptions.forEach((sub, i) => {
         const name = sub.alias || shortenAddress(sub.address);
-        msg += `${i + 1}\\. *${escapeMarkdown(name)}*\n   \`${sub.address}\`\n\n`;
+        msg += `${i + 1}. *${escapeMarkdown(name)}*\n   \`${sub.address}\`\n\n`;
       });
       return msg;
     }
@@ -417,7 +418,7 @@ _地址格式: 0x\\.\\.\\._`;
           const pnlPct = formatPercent(pos.percentPnl);
           const price = (pos.curPrice * 100).toFixed(1);
           const pnlEmoji = pos.cashPnl >= 0 ? '🟢' : '🔴';
-          msg += `${i + 1}\\. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
+          msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
           msg += `   ${escapeMarkdown(pos.outcome || '')} @ ${price}%\n`;
           msg += `   ${pnlEmoji} ${pnl} (${pnlPct})\n\n`;
         });
@@ -447,7 +448,7 @@ _地址格式: 0x\\.\\.\\._`;
           totalPnl += pnl;
           const pnlStr = formatUSD(pnl);
           const pnlEmoji = pnl >= 0 ? '✅' : '❌';
-          msg += `${i + 1}\\. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
+          msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
           msg += `   ${pnlEmoji} ${pnlStr}\n\n`;
         });
         msg += `💰 *合计: ${formatUSD(totalPnl)}*`;
@@ -492,7 +493,7 @@ _地址格式: 0x\\.\\.\\._`;
         const formatRank = (data, period) => {
           if (!data || data.length === 0) return `*${period}:* 未上榜\n\n`;
           const r = data[0];
-          return `*${period}:*\n   排名: \\#${r.rank}\n   盈亏: ${formatUSD(r.pnl)}\n   交易量: ${formatUSD(r.vol)}\n\n`;
+          return `*${period}:*\n   排名: #${r.rank}\n   盈亏: ${formatUSD(r.pnl)}\n   交易量: ${formatUSD(r.vol)}\n\n`;
         };
 
         msg += formatRank(dayRank, '今日');
