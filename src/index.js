@@ -476,10 +476,11 @@ _Address format: 0x..._`;
       }
 
       try {
-        const [dayRank, weekRank, monthRank] = await Promise.all([
+        const [dayRank, weekRank, monthRank, allRank] = await Promise.all([
           getLeaderboardRank(address, 'DAY'),
           getLeaderboardRank(address, 'WEEK'),
           getLeaderboardRank(address, 'MONTH'),
+          getLeaderboardRank(address, 'ALL'),
         ]);
 
         let msg = `🏆 *${escapeMarkdown(displayName)}* Leaderboard:\n\n`;
@@ -493,6 +494,7 @@ _Address format: 0x..._`;
         msg += formatRank(dayRank, 'Today');
         msg += formatRank(weekRank, 'This Week');
         msg += formatRank(monthRank, 'This Month');
+        msg += formatRank(allRank, 'All Time');
 
         return msg;
       } catch (e) {
