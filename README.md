@@ -1,190 +1,179 @@
-# Polymarket 聪明钱跟踪器 v2.0
+# Polymarket Smart Money Tracker v2.0
 
-通过 Telegram Bot 订阅 Polymarket 用户地址，自动推送交易活动 (买入/卖出/赎回)。
+Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/REDEEM).
 
-## 架构
+## Architecture
 
 ```
 ┌─────────────────┐      ┌────────────────────┐      ┌─────────────────┐
 │  Polymarket     │      │  Cloudflare        │      │  Telegram       │
 │  Data API       │─────▶│  Workers           │─────▶│  Bot API        │
-│                 │      │  (每分钟轮询)       │      │  (Webhook接收)  │
+│                 │      │  (Poll every min)  │      │  (Webhook)      │
 └─────────────────┘      └────────────────────┘      └─────────────────┘
                                   │
                                   ▼
                          ┌────────────────────┐
                          │  Cloudflare KV     │
-                         │  (订阅列表+状态)    │
+                         │  (Subscriptions)   │
                          └────────────────────┘
 ```
 
-## Bot 命令
+## Bot Commands
 
-### 订阅管理
+### Subscription
 
-| 命令 | 说明 |
-|------|------|
-| `/subscribe <地址> [别名]` | 订阅地址，别名可选（默认用 Polymarket 用户名） |
-| `/unsubscribe <地址>` | 取消订阅 |
-| `/list` | 查看订阅列表 |
-| `/alias <地址> <新别名>` | 修改别名 |
+| Command | Description |
+|---------|-------------|
+| `/subscribe <address> [alias]` | Subscribe to address (alias defaults to Polymarket username) |
+| `/unsubscribe <address>` | Unsubscribe |
+| `/list` | List subscriptions |
+| `/alias <address> <new_alias>` | Update alias |
 
-### 查询数据
+### Query
 
-| 命令 | 说明 |
-|------|------|
-| `/pos [地址/别名]` | 当前持仓 |
-| `/pnl [地址/别名]` | 已实现收益（已平仓） |
-| `/value [地址/别名]` | 持仓总价值 |
-| `/rank [地址/别名]` | 排行榜排名（日/周/月） |
+| Command | Description |
+|---------|-------------|
+| `/pos [address/alias]` | Current positions |
+| `/pnl [address/alias]` | Realized PnL |
+| `/value [address/alias]` | Portfolio value |
+| `/rank [address/alias]` | Leaderboard ranking |
 
-> 如果只有一个订阅，查询命令可省略地址参数
+> If you have only one subscription, address/alias can be omitted
 
-## 推送消息示例
+## Message Examples
 
-### 买入
+### BUY
 ```
-🟢 买入 | 聪明钱A
+🟢 BUY | SmartMoney
 
 🏷️ Will Trump win 2024 election?
-📌 买入 Yes @ 52.3%
+📌 Yes @ 52.3%
 
-💰 投入: $1,000.00
-📈 份数: 1,912.05
-💵 若胜: $912.05 (+91.2%)
+💰 Cost: $1,000.00
+📈 Shares: 1,912.05
+💵 If Win: $912.05 (+91.2%)
 
 ⏰ 2026-01-22 15:30:00 UTC
-🔗 市场 | 交易
+🔗 Market | Tx
 ```
 
-### 卖出
+### SELL
 ```
-🔴 卖出 | 聪明钱A
+🔴 SELL | SmartMoney
 
 🏷️ Will Trump win 2024 election?
-📌 卖出 Yes @ 65.0%
+📌 Yes @ 65.0%
 
-💵 收回: $1,243.00
-📈 份数: 1,912.05
+💵 Received: $1,243.00
+📈 Shares: 1,912.05
 
 ⏰ 2026-01-22 16:00:00 UTC
-🔗 市场 | 交易
+🔗 Market | Tx
 ```
 
-### 赎回
+### REDEEM
 ```
-✅ 赎回 | 聪明钱A
+✅ REDEEM | SmartMoney
 
 🏷️ Will Trump win 2024 election?
-🏆 结果: Yes 胜出
-
-💵 赎回: $1,912.05
-📈 份数: 1,912.05
+💵 Redeemed: $1,912.05
 
 ⏰ 2026-01-22 17:00:00 UTC
-🔗 市场 | 交易
+🔗 Market | Tx
 ```
 
-## 部署步骤
+## Deployment
 
-### 1. 创建 Telegram Bot
+### 1. Create Telegram Bot
 
-1. 打开 Telegram，搜索 `@BotFather`
-2. 发送 `/newbot`
-3. 按提示设置 Bot 名称和用户名
-4. 获取 Bot Token: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+1. Open Telegram, search `@BotFather`
+2. Send `/newbot`
+3. Follow prompts to set bot name and username
+4. Get Bot Token: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
 
-### 2. 获取 Chat ID
-
-**个人聊天:**
-1. 给 Bot 发送任意消息
-2. 访问: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-3. 找到 `chat.id`
-
-**群组:**
-1. 把 Bot 拉入群组
-2. 访问上述 URL，群组 ID 是负数如 `-1001234567890`
-
-### 3. 安装依赖
+### 2. Install Dependencies
 
 ```bash
 bun install
 ```
 
-### 4. 创建 KV 存储
+### 3. Create KV Storage
 
 ```bash
 bunx wrangler kv:namespace create "POLYMARKET_KV"
 ```
 
-将输出的 `id` 填入 `wrangler.toml`。
+Copy the output `id` to `wrangler.toml`.
 
-### 5. 设置密钥
+### 4. Set Secret
 
 ```bash
 bunx wrangler secret put TG_BOT_TOKEN
-# 输入 Bot Token
-
-bunx wrangler secret put TG_CHAT_ID
-# 输入默认 Chat ID（用于新订阅的推送目标）
+# Enter your Bot Token
 ```
 
-### 6. 部署
+### 5. Deploy
 
 ```bash
 bunx wrangler deploy
 ```
 
-### 7. 设置 Webhook
+### 6. Set Webhook
 
-部署后访问:
+After deployment, visit:
 ```
-https://polymarket-tracker.<账号>.workers.dev/setWebhook?url=https://polymarket-tracker.<账号>.workers.dev/webhook
+https://polymarket-tracker.<your-account>.workers.dev/setWebhook?url=https://polymarket-tracker.<your-account>.workers.dev/webhook
 ```
 
-## HTTP 端点
+## HTTP Endpoints
 
-| 路径 | 说明 |
-|------|------|
+| Path | Description |
+|------|-------------|
 | `POST /webhook` | Telegram Bot Webhook |
-| `GET /check` | 手动触发检查 |
-| `GET /health` | 健康检查 |
-| `GET /setWebhook?url=` | 设置 Telegram Webhook |
-| `GET /subscriptions` | 查看订阅列表 (JSON) |
+| `GET /check` | Manually trigger check |
+| `GET /health` | Health check |
+| `GET /setWebhook?url=` | Set Telegram Webhook |
+| `GET /subscriptions` | View subscriptions (JSON) |
 
-## 开发
+## Development
 
 ```bash
-# 本地开发
+# Local dev
 bunx wrangler dev
 
-# 部署
+# Deploy
 bunx wrangler deploy
 
-# 查看日志
+# View logs
 bunx wrangler tail
 ```
 
-## 修改轮询频率
+## Polling Frequency
 
-编辑 `wrangler.toml` 中的 crons:
-- `* * * * *` - 每分钟
-- `*/5 * * * *` - 每 5 分钟
+Edit `wrangler.toml` crons:
+- `* * * * *` - Every minute
+- `*/5 * * * *` - Every 5 minutes
 
-## 费用
+## Cost
 
-完全免费（在 Cloudflare Workers 免费额度内）。
+Free (within Cloudflare Workers free tier).
 
-## 常见问题
+## FAQ
 
-**Q: 订阅后没收到通知？**
-1. 确认已设置 Webhook
-2. 检查 Bot Token 和 Chat ID 是否正确
-3. 检查订阅地址是否有新交易
-4. 运行 `bunx wrangler tail` 查看日志
+**Q: Not receiving notifications after subscribing?**
+1. Confirm Webhook is set
+2. Check if Bot Token is correct
+3. Check if the subscribed address has new trades
+4. Run `bunx wrangler tail` to view logs
 
-**Q: 如何添加新地址？**
-直接在 Telegram 中发送 `/subscribe 0x地址 别名`
+**Q: How to add a new address?**
+Send `/subscribe 0xAddress alias` in Telegram
 
-**Q: 查询命令显示"请提供地址"？**
-如果有多个订阅，需要指定地址或别名，如 `/pos 聪明钱A`
+**Q: Query command shows "Please provide address"?**
+If you have multiple subscriptions, specify address or alias, e.g., `/pos SmartMoney`
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+See the [LICENSE](LICENSE) file for details.

@@ -1,23 +1,22 @@
 /**
  * Polymarket Smart Money Tracker v2.0
  *
- * 功能：
- * - 通过 TG Bot 命令订阅/管理监控地址
- * - 自动推送交易活动 (BUY/SELL/REDEEM)
- * - 查询持仓、收益、排名等
+ * Features:
+ * - Subscribe/manage addresses via Telegram Bot
+ * - Auto push trading activities (BUY/SELL/REDEEM)
+ * - Query positions, PnL, rankings
  *
- * 环境变量:
+ * Environment:
  * - TG_BOT_TOKEN: Telegram Bot Token
- * - TG_CHAT_ID: 默认推送的 Chat ID
  *
- * KV 存储:
- * - subscriptions: 订阅列表 [{address, alias, chatId, addedAt}]
- * - last_activity:{address}: 最后处理的活动时间戳
+ * KV Storage:
+ * - subscriptions: [{address, alias, chatId, addedAt}]
+ * - last_activity:{address}: Last processed activity timestamp
  */
 
 const POLYMARKET_API = 'https://data-api.polymarket.com';
 
-// ============ 工具函数 ============
+// ============ Utilities ============
 
 function shortenAddress(address) {
   if (!address) return '';
@@ -47,7 +46,6 @@ function formatTimestamp(timestamp) {
 
 function escapeMarkdown(text) {
   if (!text) return '';
-  // 旧版 Markdown 只需转义这几个字符
   return text.replace(/[_*`\[]/g, '\\$&');
 }
 
@@ -75,7 +73,7 @@ async function polymarketRequest(endpoint, params = {}) {
   return response.json();
 }
 
-// 获取用户活动 (TRADE, REDEEM)
+// Get user activity (TRADE, REDEEM)
 async function getUserActivity(address, options = {}) {
   return polymarketRequest('/activity', {
     user: address,
@@ -87,7 +85,7 @@ async function getUserActivity(address, options = {}) {
   });
 }
 
-// 获取用户当前持仓
+// Get user positions
 async function getUserPositions(address, options = {}) {
   return polymarketRequest('/positions', {
     user: address,
@@ -99,13 +97,13 @@ async function getUserPositions(address, options = {}) {
   });
 }
 
-// 获取用户持仓总价值
+// Get user portfolio value
 async function getUserValue(address) {
   const result = await polymarketRequest('/value', { user: address });
   return Array.isArray(result) && result.length > 0 ? result[0] : { value: 0 };
 }
 
-// 获取用户已平仓收益
+// Get user closed positions
 async function getClosedPositions(address, options = {}) {
   return polymarketRequest('/v1/closed-positions', {
     user: address,
@@ -116,7 +114,7 @@ async function getClosedPositions(address, options = {}) {
   });
 }
 
-// 获取用户排行榜排名
+// Get user leaderboard rank
 async function getLeaderboardRank(address, timePeriod = 'DAY') {
   return polymarketRequest('/v1/leaderboard', {
     user: address,
@@ -150,7 +148,7 @@ async function sendTelegram(botToken, chatId, text, options = {}) {
   return true;
 }
 
-// ============ 消息格式化 ============
+// ============ Message Formatting ============
 
 function formatBuyMessage(activity, displayName) {
   const price = (activity.price * 100).toFixed(1);
@@ -161,17 +159,17 @@ function formatBuyMessage(activity, displayName) {
     ? `+${(((activity.size / activity.usdcSize) - 1) * 100).toFixed(1)}%`
     : '';
 
-  return `🟢 *买入* | ${escapeMarkdown(displayName)}
+  return `🟢 *BUY* | ${escapeMarkdown(displayName)}
 
 🏷️ ${escapeMarkdown(activity.title || 'Unknown')}
-📌 买入 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
+📌 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
 
-💰 投入: ${cost}
-📈 份数: ${size}
-💵 若胜: ${potentialProfit} (${potentialPct})
+💰 Cost: ${cost}
+📈 Shares: ${size}
+💵 If Win: ${potentialProfit} (${potentialPct})
 
 ⏰ ${formatTimestamp(activity.timestamp)}
-🔗 [市场](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [交易](https://polygonscan.com/tx/${activity.transactionHash})`;
+🔗 [Market](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [Tx](https://polygonscan.com/tx/${activity.transactionHash})`;
 }
 
 function formatSellMessage(activity, displayName) {
@@ -179,32 +177,28 @@ function formatSellMessage(activity, displayName) {
   const received = formatUSD(activity.usdcSize);
   const size = activity.size?.toFixed(2) || '0';
 
-  return `🔴 *卖出* | ${escapeMarkdown(displayName)}
+  return `🔴 *SELL* | ${escapeMarkdown(displayName)}
 
 🏷️ ${escapeMarkdown(activity.title || 'Unknown')}
-📌 卖出 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
+📌 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
 
-💵 收回: ${received}
-📈 份数: ${size}
+💵 Received: ${received}
+📈 Shares: ${size}
 
 ⏰ ${formatTimestamp(activity.timestamp)}
-🔗 [市场](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [交易](https://polygonscan.com/tx/${activity.transactionHash})`;
+🔗 [Market](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [Tx](https://polygonscan.com/tx/${activity.transactionHash})`;
 }
 
 function formatRedeemMessage(activity, displayName) {
   const redeemed = formatUSD(activity.usdcSize);
-  const size = activity.size?.toFixed(2) || '0';
 
-  return `✅ *赎回* | ${escapeMarkdown(displayName)}
+  return `✅ *REDEEM* | ${escapeMarkdown(displayName)}
 
 🏷️ ${escapeMarkdown(activity.title || 'Unknown')}
-🏆 结果: *${escapeMarkdown(activity.outcome || '')}* 胜出
-
-💵 赎回: ${redeemed}
-📈 份数: ${size}
+💵 Redeemed: ${redeemed}
 
 ⏰ ${formatTimestamp(activity.timestamp)}
-🔗 [市场](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [交易](https://polygonscan.com/tx/${activity.transactionHash})`;
+🔗 [Market](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [Tx](https://polygonscan.com/tx/${activity.transactionHash})`;
 }
 
 function formatActivityMessage(activity, displayName) {
@@ -220,7 +214,7 @@ function formatActivityMessage(activity, displayName) {
   return null;
 }
 
-// ============ KV 存储操作 ============
+// ============ KV Storage ============
 
 async function getSubscriptions(kv) {
   const data = await kv.get('subscriptions', { type: 'json' });
@@ -242,11 +236,11 @@ async function setLastActivity(kv, address, timestamp) {
   await kv.put(key, timestamp.toString(), { expirationTtl: 86400 * 30 });
 }
 
-// ============ 地址解析 ============
+// ============ Address Resolution ============
 
 async function resolveAddressArg(arg, kv) {
   if (!arg) {
-    // 如果没有参数，检查是否只有一个订阅
+    // If no arg, check if there's only one subscription
     const subscriptions = await getSubscriptions(kv);
     if (subscriptions.length === 1) {
       const sub = subscriptions[0];
@@ -258,7 +252,7 @@ async function resolveAddressArg(arg, kv) {
     return { address: null, displayName: null };
   }
 
-  // 检查是否是地址
+  // Check if it's an address
   if (arg.toLowerCase().startsWith('0x')) {
     return {
       address: arg.toLowerCase(),
@@ -266,7 +260,7 @@ async function resolveAddressArg(arg, kv) {
     };
   }
 
-  // 查找别名
+  // Find by alias
   const subscriptions = await getSubscriptions(kv);
   const sub = subscriptions.find(
     (s) => s.alias && s.alias.toLowerCase() === arg.toLowerCase()
@@ -282,7 +276,7 @@ async function resolveAddressArg(arg, kv) {
   return { address: null, displayName: null };
 }
 
-// ============ Bot 命令处理 ============
+// ============ Bot Commands ============
 
 async function handleCommand(command, args, chatId, env) {
   const kv = env.POLYMARKET_KV;
@@ -292,36 +286,36 @@ async function handleCommand(command, args, chatId, env) {
     case '/help':
       return `🤖 *Polymarket Tracker Bot*
 
-*订阅管理:*
-/subscribe <地址> [别名] - 订阅地址
-/unsubscribe <地址> - 取消订阅
-/list - 查看订阅列表
-/alias <地址> <新别名> - 修改别名
+*Subscription:*
+/subscribe <address> [alias] - Subscribe
+/unsubscribe <address> - Unsubscribe
+/list - List subscriptions
+/alias <address> <new\\_alias> - Update alias
 
-*查询数据:*
-/pos [地址/别名] - 当前持仓
-/pnl [地址/别名] - 已实现收益
-/value [地址/别名] - 持仓总价值
-/rank [地址/别名] - 排行榜排名
+*Query:*
+/pos [address/alias] - Positions
+/pnl [address/alias] - Realized PnL
+/value [address/alias] - Portfolio value
+/rank [address/alias] - Leaderboard
 
-_地址格式: 0x..._`;
+_Address format: 0x..._`;
 
     case '/subscribe': {
       if (!args[0]) {
-        return '❌ 请提供地址: /subscribe 0x... [别名]';
+        return '❌ Please provide address: /subscribe 0x... [alias]';
       }
       const address = args[0].toLowerCase();
       if (!address.startsWith('0x') || address.length !== 42) {
-        return '❌ 无效地址格式';
+        return '❌ Invalid address format';
       }
 
       const subscriptions = await getSubscriptions(kv);
       const existing = subscriptions.find((s) => s.address === address);
       if (existing) {
-        return `⚠️ 已订阅: ${existing.alias || shortenAddress(address)}`;
+        return `⚠️ Already subscribed: ${existing.alias || shortenAddress(address)}`;
       }
 
-      // 获取用户 pseudonym 作为默认别名
+      // Get pseudonym as default alias
       let defaultAlias = args.slice(1).join(' ');
       if (!defaultAlias) {
         try {
@@ -342,39 +336,39 @@ _地址格式: 0x..._`;
       });
       await saveSubscriptions(kv, subscriptions);
 
-      // 设置初始 last_activity 为当前时间，避免推送历史消息
+      // Set initial last_activity to now to avoid pushing history
       await setLastActivity(kv, address, Math.floor(Date.now() / 1000));
 
       const displayName = defaultAlias || shortenAddress(address);
-      return `✅ 已订阅: *${escapeMarkdown(displayName)}*\n地址: \`${address}\``;
+      return `✅ Subscribed: *${escapeMarkdown(displayName)}*\nAddress: \`${address}\``;
     }
 
     case '/unsubscribe': {
       if (!args[0]) {
-        return '❌ 请提供地址: /unsubscribe 0x...';
+        return '❌ Please provide address: /unsubscribe 0x...';
       }
       const address = args[0].toLowerCase();
       const subscriptions = await getSubscriptions(kv);
       const index = subscriptions.findIndex((s) => s.address === address);
 
       if (index === -1) {
-        return '❌ 未找到该订阅';
+        return '❌ Subscription not found';
       }
 
       const removed = subscriptions.splice(index, 1)[0];
       await saveSubscriptions(kv, subscriptions);
       await kv.delete(`last_activity:${address}`);
 
-      return `✅ 已取消订阅: ${removed.alias || shortenAddress(address)}`;
+      return `✅ Unsubscribed: ${removed.alias || shortenAddress(address)}`;
     }
 
     case '/list': {
       const subscriptions = await getSubscriptions(kv);
       if (subscriptions.length === 0) {
-        return '📋 暂无订阅\n\n使用 /subscribe 添加';
+        return '📋 No subscriptions\n\nUse /subscribe to add';
       }
 
-      let msg = '📋 *订阅列表:*\n\n';
+      let msg = '📋 *Subscriptions:*\n\n';
       subscriptions.forEach((sub, i) => {
         const name = sub.alias || shortenAddress(sub.address);
         msg += `${i + 1}. *${escapeMarkdown(name)}*\n   \`${sub.address}\`\n\n`;
@@ -384,7 +378,7 @@ _地址格式: 0x..._`;
 
     case '/alias': {
       if (!args[0] || !args[1]) {
-        return '❌ 用法: /alias 0x... 新别名';
+        return '❌ Usage: /alias 0x... new\\_alias';
       }
       const address = args[0].toLowerCase();
       const newAlias = args.slice(1).join(' ');
@@ -392,27 +386,27 @@ _地址格式: 0x..._`;
       const subscriptions = await getSubscriptions(kv);
       const sub = subscriptions.find((s) => s.address === address);
       if (!sub) {
-        return '❌ 未找到该订阅';
+        return '❌ Subscription not found';
       }
 
       sub.alias = newAlias;
       await saveSubscriptions(kv, subscriptions);
-      return `✅ 别名已更新: *${escapeMarkdown(newAlias)}*`;
+      return `✅ Alias updated: *${escapeMarkdown(newAlias)}*`;
     }
 
     case '/pos': {
       const { address, displayName } = await resolveAddressArg(args[0], kv);
       if (!address) {
-        return '❌ 请提供地址或别名: /pos 0x... 或 /pos 别名';
+        return '❌ Please provide address or alias: /pos 0x...';
       }
 
       try {
         const positions = await getUserPositions(address);
         if (!positions || positions.length === 0) {
-          return `📊 *${escapeMarkdown(displayName)}* 暂无持仓`;
+          return `📊 *${escapeMarkdown(displayName)}* has no positions`;
         }
 
-        let msg = `📊 *${escapeMarkdown(displayName)}* 当前持仓:\n\n`;
+        let msg = `📊 *${escapeMarkdown(displayName)}* Positions:\n\n`;
         positions.slice(0, 8).forEach((pos, i) => {
           const pnl = formatUSD(pos.cashPnl);
           const pnlPct = formatPercent(pos.percentPnl);
@@ -425,24 +419,24 @@ _地址格式: 0x..._`;
         return msg;
       } catch (e) {
         console.error('Error getting positions:', e);
-        return '❌ 获取持仓失败';
+        return '❌ Failed to get positions';
       }
     }
 
     case '/pnl': {
       const { address, displayName } = await resolveAddressArg(args[0], kv);
       if (!address) {
-        return '❌ 请提供地址或别名: /pnl 0x...';
+        return '❌ Please provide address or alias: /pnl 0x...';
       }
 
       try {
         const closed = await getClosedPositions(address);
         if (!closed || closed.length === 0) {
-          return `📈 *${escapeMarkdown(displayName)}* 暂无已平仓记录`;
+          return `📈 *${escapeMarkdown(displayName)}* has no closed positions`;
         }
 
         let totalPnl = 0;
-        let msg = `📈 *${escapeMarkdown(displayName)}* 已实现收益:\n\n`;
+        let msg = `📈 *${escapeMarkdown(displayName)}* Realized PnL:\n\n`;
         closed.slice(0, 8).forEach((pos, i) => {
           const pnl = pos.realizedPnl || 0;
           totalPnl += pnl;
@@ -451,34 +445,34 @@ _地址格式: 0x..._`;
           msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
           msg += `   ${pnlEmoji} ${pnlStr}\n\n`;
         });
-        msg += `💰 *合计: ${formatUSD(totalPnl)}*`;
+        msg += `💰 *Total: ${formatUSD(totalPnl)}*`;
         return msg;
       } catch (e) {
         console.error('Error getting closed positions:', e);
-        return '❌ 获取收益失败';
+        return '❌ Failed to get PnL';
       }
     }
 
     case '/value': {
       const { address, displayName } = await resolveAddressArg(args[0], kv);
       if (!address) {
-        return '❌ 请提供地址或别名: /value 0x...';
+        return '❌ Please provide address or alias: /value 0x...';
       }
 
       try {
         const result = await getUserValue(address);
         const value = formatUSD(result.value);
-        return `💰 *${escapeMarkdown(displayName)}* 持仓总价值:\n\n*${value}*`;
+        return `💰 *${escapeMarkdown(displayName)}* Portfolio Value:\n\n*${value}*`;
       } catch (e) {
         console.error('Error getting value:', e);
-        return '❌ 获取价值失败';
+        return '❌ Failed to get value';
       }
     }
 
     case '/rank': {
       const { address, displayName } = await resolveAddressArg(args[0], kv);
       if (!address) {
-        return '❌ 请提供地址或别名: /rank 0x...';
+        return '❌ Please provide address or alias: /rank 0x...';
       }
 
       try {
@@ -488,22 +482,22 @@ _地址格式: 0x..._`;
           getLeaderboardRank(address, 'MONTH'),
         ]);
 
-        let msg = `🏆 *${escapeMarkdown(displayName)}* 排行榜:\n\n`;
+        let msg = `🏆 *${escapeMarkdown(displayName)}* Leaderboard:\n\n`;
 
         const formatRank = (data, period) => {
-          if (!data || data.length === 0) return `*${period}:* 未上榜\n\n`;
+          if (!data || data.length === 0) return `*${period}:* Not ranked\n\n`;
           const r = data[0];
-          return `*${period}:*\n   排名: #${r.rank}\n   盈亏: ${formatUSD(r.pnl)}\n   交易量: ${formatUSD(r.vol)}\n\n`;
+          return `*${period}:*\n   Rank: #${r.rank}\n   PnL: ${formatUSD(r.pnl)}\n   Volume: ${formatUSD(r.vol)}\n\n`;
         };
 
-        msg += formatRank(dayRank, '今日');
-        msg += formatRank(weekRank, '本周');
-        msg += formatRank(monthRank, '本月');
+        msg += formatRank(dayRank, 'Today');
+        msg += formatRank(weekRank, 'This Week');
+        msg += formatRank(monthRank, 'This Month');
 
         return msg;
       } catch (e) {
         console.error('Error getting rank:', e);
-        return '❌ 获取排名失败';
+        return '❌ Failed to get rank';
       }
     }
 
@@ -512,41 +506,26 @@ _地址格式: 0x..._`;
   }
 }
 
-// ============ Webhook 处理 ============
+// ============ Webhook Handler ============
 
 async function handleWebhook(request, env) {
   try {
     const update = await request.json();
-    console.log('Received update:', JSON.stringify(update));
-
-    // 处理消息
     const message = update.message;
-    if (!message || !message.text) {
-      console.log('No message or text, skipping');
-      return new Response('OK');
-    }
+    if (!message || !message.text) return new Response('OK');
 
     const chatId = message.chat.id;
     const text = message.text.trim();
-    console.log(`Message from ${chatId}: ${text}`);
-
-    // 解析命令
-    if (!text.startsWith('/')) {
-      console.log('Not a command, skipping');
-      return new Response('OK');
-    }
+    if (!text.startsWith('/')) return new Response('OK');
 
     const parts = text.split(/\s+/);
-    const command = parts[0].split('@')[0].toLowerCase(); // 移除 @botname
+    const command = parts[0].split('@')[0].toLowerCase();
     const args = parts.slice(1);
     console.log(`Command: ${command}, args: ${args.join(', ')}`);
 
     const response = await handleCommand(command, args, chatId, env);
-    console.log(`Response: ${response ? response.substring(0, 100) : 'null'}`);
-
     if (response) {
-      const sent = await sendTelegram(env.TG_BOT_TOKEN, chatId, response);
-      console.log(`Telegram send result: ${sent}`);
+      await sendTelegram(env.TG_BOT_TOKEN, chatId, response);
     }
 
     return new Response('OK');
@@ -556,16 +535,12 @@ async function handleWebhook(request, env) {
   }
 }
 
-// ============ 定时任务 ============
+// ============ Scheduled Task ============
 
 async function checkSubscriptions(env) {
-  console.log('Starting subscription check...');
-
   const kv = env.POLYMARKET_KV;
   const botToken = env.TG_BOT_TOKEN;
-
   const subscriptions = await getSubscriptions(kv);
-  console.log(`Found ${subscriptions.length} subscriptions`);
 
   if (subscriptions.length === 0) {
     return { total: 0, processed: 0, notified: 0 };
@@ -577,17 +552,13 @@ async function checkSubscriptions(env) {
   for (const sub of subscriptions) {
     try {
       const lastActivity = await getLastActivity(kv, sub.address);
-      console.log(`Checking ${sub.alias || sub.address}, last: ${lastActivity}`);
-
       const activities = await getUserActivity(sub.address, { limit: 20 });
 
-      // 过滤新活动
+      // Filter new activities
       const newActivities = activities.filter((a) => a.timestamp > lastActivity);
-      console.log(`Found ${newActivities.length} new activities`);
-
       if (newActivities.length === 0) continue;
 
-      // 按时间排序（旧的在前）
+      // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
       const displayName = sub.alias || sub.pseudonym || shortenAddress(sub.address);
@@ -595,14 +566,13 @@ async function checkSubscriptions(env) {
 
       for (const activity of newActivities) {
         const message = formatActivityMessage(activity, displayName);
-        if (message) {
-          const chatId = sub.chatId || env.TG_CHAT_ID;
-          const sent = await sendTelegram(botToken, chatId, message);
+        if (message && sub.chatId) {
+          const sent = await sendTelegram(botToken, sub.chatId, message);
           if (sent) {
             totalNotified++;
             console.log(`Notified: ${activity.type} ${activity.transactionHash}`);
           }
-          // 避免 Telegram 限流
+          // Avoid Telegram rate limit
           await new Promise((r) => setTimeout(r, 100));
         }
         maxTimestamp = Math.max(maxTimestamp, activity.timestamp);
@@ -617,35 +587,32 @@ async function checkSubscriptions(env) {
     }
   }
 
-  console.log(`Done: ${totalProcessed} processed, ${totalNotified} notified`);
   return { total: subscriptions.length, processed: totalProcessed, notified: totalNotified };
 }
 
-// ============ HTTP 处理 ============
+// ============ HTTP Handler ============
 
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
-  console.log(`[Request] ${request.method} ${path}`);
 
   // Telegram Webhook
   if (path === '/webhook' && request.method === 'POST') {
-    console.log('[Webhook] Received POST /webhook');
     return handleWebhook(request, env);
   }
 
-  // 手动触发检查
+  // Manual trigger
   if (path === '/check') {
     const results = await checkSubscriptions(env);
     return Response.json(results);
   }
 
-  // 健康检查
+  // Health check
   if (path === '/health') {
     return Response.json({ status: 'ok', timestamp: Date.now() });
   }
 
-  // 设置 Webhook
+  // Set Webhook
   if (path === '/setWebhook') {
     const webhookUrl = url.searchParams.get('url');
     if (!webhookUrl) {
@@ -664,13 +631,13 @@ async function handleRequest(request, env) {
     return Response.json(result);
   }
 
-  // 查看订阅列表
+  // View subscriptions
   if (path === '/subscriptions') {
     const subscriptions = await getSubscriptions(env.POLYMARKET_KV);
     return Response.json(subscriptions);
   }
 
-  // 默认响应
+  // Default response
   return Response.json({
     name: 'Polymarket Tracker Bot',
     version: '2.0.0',
@@ -684,14 +651,14 @@ async function handleRequest(request, env) {
   });
 }
 
-// ============ 导出 ============
+// ============ Export ============
 
 export default {
   async fetch(request, env) {
     return handleRequest(request, env);
   },
 
-  async scheduled(event, env, ctx) {
+  async scheduled(_event, env, ctx) {
     ctx.waitUntil(checkSubscriptions(env));
   },
 };

@@ -2,23 +2,21 @@ name = "polymarket-tracker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
-# KV 存储（订阅数据 + 活动时间戳）
+# KV Storage (subscriptions + activity timestamps)
 [[kv_namespaces]]
 binding = "POLYMARKET_KV"
 id = "ff4b4c68235844ae9175116b2ee7ee21"
 
-# 定时任务（每分钟检查新活动）
+# Scheduled task (check every minute)
 [triggers]
 crons = ["* * * * *"]
 
-# Telegram 配置 (通过 secret 设置)
+# Telegram config (set via secret)
 # bunx wrangler secret put TG_BOT_TOKEN
-# bunx wrangler secret put TG_CHAT_ID
 
-# 日志配置
-[observability]
-enabled = true
-
-[observability.logs]
-enabled = true
-invocation_logs = true
+# Logging (disable to save quota)
+# [observability]
+# enabled = true
+# [observability.logs]
+# enabled = true
+# invocation_logs = true
