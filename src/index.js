@@ -315,16 +315,16 @@ _Address format: 0x..._`;
         return `⚠️ Already subscribed: ${existing.alias || shortenAddress(address)}`;
       }
 
-      // Get pseudonym as default alias
+      // Get name as default alias
       let defaultAlias = args.slice(1).join(' ');
       if (!defaultAlias) {
         try {
           const activities = await getUserActivity(address, { limit: 1 });
-          if (activities.length > 0 && activities[0].pseudonym) {
-            defaultAlias = activities[0].pseudonym;
+          if (activities.length > 0 && activities[0].name) {
+            defaultAlias = activities[0].name;
           }
         } catch (e) {
-          console.error('Failed to get pseudonym:', e);
+          console.error('Failed to get name:', e);
         }
       }
 
@@ -563,7 +563,7 @@ async function checkSubscriptions(env) {
       // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
-      const displayName = sub.alias || sub.pseudonym || shortenAddress(sub.address);
+      const displayName = sub.alias || shortenAddress(sub.address);
       let maxTimestamp = lastActivity;
 
       for (const activity of newActivities) {
