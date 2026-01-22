@@ -625,9 +625,11 @@ async function checkSubscriptions(env) {
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
+  console.log(`[Request] ${request.method} ${path}`);
 
   // Telegram Webhook
   if (path === '/webhook' && request.method === 'POST') {
+    console.log('[Webhook] Received POST /webhook');
     return handleWebhook(request, env);
   }
 
