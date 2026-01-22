@@ -89,10 +89,10 @@ async function getUserActivity(address, options = {}) {
 async function getUserPositions(address, options = {}) {
   return polymarketRequest('/positions', {
     user: address,
-    limit: options.limit || 10,
-    sortBy: options.sortBy || 'CASHPNL',
+    limit: options.limit || 20,
+    sortBy: options.sortBy || 'TOKENS',
     sortDirection: 'DESC',
-    sizeThreshold: 0.01,
+    sizeThreshold: 1,
     ...options,
   });
 }
@@ -107,7 +107,7 @@ async function getUserValue(address) {
 async function getClosedPositions(address, options = {}) {
   return polymarketRequest('/v1/closed-positions', {
     user: address,
-    limit: options.limit || 10,
+    limit: options.limit || 20,
     sortBy: options.sortBy || 'REALIZEDPNL',
     sortDirection: 'DESC',
     ...options,
@@ -407,14 +407,19 @@ _Address format: 0x..._`;
         }
 
         let msg = `📊 *${escapeMarkdown(displayName)}* Positions:\n\n`;
-        positions.slice(0, 8).forEach((pos, i) => {
-          const pnl = formatUSD(pos.cashPnl);
-          const pnlPct = formatPercent(pos.percentPnl);
-          const price = (pos.curPrice * 100).toFixed(1);
-          const pnlEmoji = pos.cashPnl >= 0 ? '🟢' : '🔴';
-          msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
-          msg += `   ${escapeMarkdown(pos.outcome || '')} @ ${price}%\n`;
-          msg += `   ${pnlEmoji} ${pnl} (${pnlPct})\n\n`;
+        positions.slice(0, 20).forEach((pos, i) => {
+          const curPrice = (pos.curPrice * 100).toFixed(1);
+          const avgPrice = (pos.avgPrice * 100).toFixed(1);
+          const currentValue = formatUSD(pos.currentValue);
+          const initialValue = formatUSD(pos.initialValue);
+          const pnlPct = formatPercent(pos.percentPnl / 100);
+          const size = pos.size?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0';
+          const redeemable = pos.redeemable ? '✅' : '';
+
+          msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 50))}*\n`;
+          msg += `   📌 ${escapeMarkdown(pos.outcome || '')} @ ${curPrice}% (Avg: ${avgPrice}%)\n`;
+          msg += `   💰 ${currentValue} / ${initialValue} (${pnlPct})\n`;
+          msg += `   📈 ${size} shares${redeemable ? ' | Redeemable ' + redeemable : ''}\n\n`;
         });
         return msg;
       } catch (e) {
@@ -437,15 +442,23 @@ _Address format: 0x..._`;
 
         let totalPnl = 0;
         let msg = `📈 *${escapeMarkdown(displayName)}* Realized PnL:\n\n`;
-        closed.slice(0, 8).forEach((pos, i) => {
+        closed.slice(0, 20).forEach((pos, i) => {
           const pnl = pos.realizedPnl || 0;
           totalPnl += pnl;
-          const pnlStr = formatUSD(pnl);
-          const pnlEmoji = pnl >= 0 ? '✅' : '❌';
-          msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 30))}*\n`;
-          msg += `   ${pnlEmoji} ${pnlStr}\n\n`;
+          const pnlEmoji = pnl >= 0 ? '🟢' : '🔴';
+          const pnlSign = pnl >= 0 ? '+' : '';
+          const pnlStr = `${pnlSign}${formatUSD(pnl)}`;
+          const avgPrice = ((pos.avgPrice || 0) * 100).toFixed(1);
+          const date = pos.timestamp ? new Date(pos.timestamp * 1000).toISOString().substring(0, 10) : '';
+
+          msg += `${i + 1}. *${escapeMarkdown((pos.title || 'Unknown').substring(0, 50))}*\n`;
+          msg += `   📌 ${escapeMarkdown(pos.outcome || '')} @ ${avgPrice}%\n`;
+          msg += `   ${pnlEmoji} ${pnlStr}\n`;
+          if (date) msg += `   📅 ${date}\n`;
+          msg += '\n';
         });
-        msg += `💰 *Total: ${formatUSD(totalPnl)}*`;
+        const totalSign = totalPnl >= 0 ? '+' : '';
+        msg += `💰 *Total: ${totalSign}${formatUSD(totalPnl)}*`;
         return msg;
       } catch (e) {
         console.error('Error getting closed positions:', e);
