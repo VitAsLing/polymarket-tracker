@@ -32,3 +32,32 @@ export function escapeMarkdown(text: string | null | undefined): string {
   if (!text) return '';
   return text.replace(/[_*`\[]/g, '\\$&');
 }
+
+/**
+ * Get magnitude emoji based on amount (💰 count)
+ */
+export function getMagnitude(amount: number): string {
+  const abs = Math.abs(amount);
+  if (abs < 100) return '💰';
+  if (abs < 1000) return '💰💰';
+  if (abs < 10000) return '💰💰💰';
+  if (abs < 100000) return '💰💰💰💰';
+  return '💰💰💰💰💰';
+}
+
+/**
+ * Format PnL with direction emoji and magnitude
+ * e.g. 🟢💰💰💰 *+$5,000*
+ */
+export function formatPnL(amount: number, includePercent?: number): string {
+  const emoji = amount >= 0 ? '🟢' : '🔴';
+  const magnitude = getMagnitude(amount);
+  const sign = amount >= 0 ? '+' : '';
+  const formatted = `${sign}${formatUSD(amount)}`;
+
+  if (includePercent !== undefined) {
+    const pctSign = includePercent >= 0 ? '+' : '';
+    return `${emoji}${magnitude} *${formatted} (${pctSign}${(includePercent * 100).toFixed(1)}%)*`;
+  }
+  return `${emoji}${magnitude} *${formatted}*`;
+}

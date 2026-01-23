@@ -2,7 +2,7 @@
  * Bot command handlers
  */
 
-import { shortenAddress, formatUSD, formatPercent, escapeMarkdown } from '../utils/format.js';
+import { shortenAddress, formatUSD, escapeMarkdown, formatPnL } from '../utils/format.js';
 import {
   getUserActivity,
   getUserPositions,
@@ -140,17 +140,18 @@ export async function handleCommand(
         const positions = await getUserPositions(address);
         if (!positions || positions.length === 0) {
           const profileUrl = `https://polymarket.com/profile/${address}`;
-          return `📊 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.noPositions')}`;
+          return `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.noPositions')}`;
         }
 
         const profileUrl = `https://polymarket.com/profile/${address}`;
-        let msg = `📊 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.positions')}\n\n`;
+        let msg = `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.positions')}\n\n`;
         positions.slice(0, 20).forEach((pos, i) => {
           const curPrice = (pos.curPrice * 100).toFixed(1);
           const avgPrice = (pos.avgPrice * 100).toFixed(1);
           const currentValue = formatUSD(pos.currentValue);
           const initialValue = formatUSD(pos.initialValue);
-          const pnlPct = formatPercent(pos.percentPnl / 100);
+          const pnlAmount = pos.currentValue - pos.initialValue;
+          const pnlPct = pos.percentPnl / 100;
           const size = pos.size?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0';
 
           // Status emoji: ❌ lost (price near 0), ✅ redeemable (won), empty otherwise
@@ -167,7 +168,8 @@ export async function handleCommand(
 
           msg += `${i + 1}. ${statusEmoji}*${escapeMarkdown((pos.title || t(lang, 'pos.unknown')).substring(0, 50))}*\n`;
           msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${curPrice}% (${t(lang, 'pos.avg')}: ${avgPrice}%)\n`;
-          msg += `   💵 ${t(lang, 'pos.current')}: ${currentValue} | ${t(lang, 'push.cost')}: ${initialValue} (${pnlPct})\n`;
+          msg += `   💵 ${currentValue} ← ${initialValue}\n`;
+          msg += `   ${formatPnL(pnlAmount, pnlPct)}\n`;
           msg += `   🎫 ${size} ${t(lang, 'pos.shares')}\n`;
           if (marketUrl) {
             msg += `   🔗 [${t(lang, 'push.market')}](${marketUrl})\n`;
@@ -191,30 +193,26 @@ export async function handleCommand(
         const closed = await getClosedPositions(address);
         if (!closed || closed.length === 0) {
           const profileUrl = `https://polymarket.com/profile/${address}`;
-          return `📈 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.noClosedPositions')}`;
+          return `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.noClosedPositions')}`;
         }
 
         const profileUrl = `https://polymarket.com/profile/${address}`;
         let totalPnl = 0;
-        let msg = `📈 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.realizedPnl')}\n\n`;
+        let msg = `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.realizedPnl')}\n\n`;
         closed.slice(0, 20).forEach((pos, i) => {
           const pnl = pos.realizedPnl || 0;
           totalPnl += pnl;
           const statusEmoji = pnl >= 0 ? '✅ ' : '❌ ';
-          const pnlEmoji = pnl >= 0 ? '🟢' : '🔴';
-          const pnlSign = pnl >= 0 ? '+' : '';
-          const pnlStr = `${pnlSign}${formatUSD(pnl)}`;
           const avgPrice = ((pos.avgPrice || 0) * 100).toFixed(1);
           const date = pos.timestamp ? new Date(pos.timestamp * 1000).toISOString().substring(0, 10) : '';
 
           msg += `${i + 1}. ${statusEmoji}*${escapeMarkdown((pos.title || t(lang, 'pos.unknown')).substring(0, 50))}*\n`;
-          msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${t(lang, 'pos.avg')}: ${avgPrice}%\n`;
-          msg += `   ${pnlEmoji} ${t(lang, 'pnl.profit')}: ${pnlStr}\n`;
+          msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${avgPrice}%\n`;
+          msg += `   ${formatPnL(pnl)}\n`;
           if (date) msg += `   📅 ${date}\n`;
           msg += '\n';
         });
-        const totalSign = totalPnl >= 0 ? '+' : '';
-        msg += `💰 *${t(lang, 'cmd.total')}: ${totalSign}${formatUSD(totalPnl)}*`;
+        msg += `🧮 ${t(lang, 'cmd.total')}: ${formatPnL(totalPnl)}`;
         return msg;
       } catch (e) {
         console.error('Error getting closed positions:', e);
@@ -232,7 +230,7 @@ export async function handleCommand(
         const result = await getUserValue(address);
         const value = formatUSD(result.value);
         const profileUrl = `https://polymarket.com/profile/${address}`;
-        return `💰 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.portfolioValue')}\n\n*${value}*`;
+        return `💵 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.portfolioValue')}\n\n*${value}*`;
       } catch (e) {
         console.error('Error getting value:', e);
         return t(lang, 'error.failedValue');
@@ -259,7 +257,7 @@ export async function handleCommand(
         const formatRank = (data: LeaderboardEntry[], period: string): string => {
           if (!data || data.length === 0) return `*${period}:* ${t(lang, 'cmd.notRanked')}\n\n`;
           const r = data[0];
-          return `*${period}:*\n   🥇 #${r.rank}\n   💵 ${t(lang, 'rank.pnl')}: ${formatUSD(r.pnl)}\n   📊 ${t(lang, 'rank.volume')}: ${formatUSD(r.vol)}\n\n`;
+          return `*${period}:* 🥇 #${r.rank}\n${formatPnL(r.pnl)}\n📊 ${t(lang, 'rank.volume')}: ${formatUSD(r.vol)}\n\n`;
         };
 
         msg += formatRank(dayRank, t(lang, 'cmd.today'));
