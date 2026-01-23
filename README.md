@@ -5,6 +5,7 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/
 ## Tech Stack
 
 - **Runtime**: Cloudflare Workers (serverless, free tier)
+- **Language**: TypeScript
 - **Storage**: Cloudflare KV
 - **Bot**: Telegram Bot API (Webhook)
 - **Data**: Polymarket Data API
@@ -23,6 +24,7 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/
 | `/subscribe <address> [alias]` | Subscribe to address |
 | `/unsubscribe <address>` | Unsubscribe |
 | `/list` | List your subscriptions |
+| `/alias <address> <new_alias>` | Update alias |
 | `/pos [address/alias]` | Current positions |
 | `/pnl [address/alias]` | Realized PnL |
 | `/value [address/alias]` | Portfolio value |
@@ -53,6 +55,8 @@ bunx wrangler deploy
 bunx wrangler dev      # Local dev
 bunx wrangler deploy   # Deploy
 bunx wrangler tail     # View logs
+bun run typecheck      # TypeScript check
+bun run lint           # ESLint check
 ```
 
 ## Disclaimer
