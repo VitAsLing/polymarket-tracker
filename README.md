@@ -36,8 +36,8 @@ bunx wrangler secret put TG_BOT_TOKEN
 # 4. Deploy
 bunx wrangler deploy
 
-# 5. Set Webhook (visit in browser)
-# https://<worker>.workers.dev/setWebhook?url=https://<worker>.workers.dev/webhook
+# 5. Set Telegram Webhook (visit in browser)
+# https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<worker>.workers.dev/webhook
 ```
 
 ## Development
