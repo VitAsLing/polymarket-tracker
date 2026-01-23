@@ -3,7 +3,7 @@
  */
 
 import { shortenAddress } from '../utils/format.js';
-import type { Subscription, ResolvedAddress } from '../types/index.js';
+import type { Subscription, ResolvedAddress, Lang } from '../types/index.js';
 
 export async function getSubscriptions(kv: KVNamespace): Promise<Subscription[]> {
   const data = await kv.get('subscriptions', { type: 'json' });
@@ -63,4 +63,13 @@ export async function resolveAddressArg(
   }
 
   return { address: null, displayName: null };
+}
+
+export async function getLang(kv: KVNamespace, chatId: number): Promise<Lang> {
+  const lang = await kv.get(`lang:${chatId}`);
+  return (lang as Lang) || 'en';
+}
+
+export async function setLang(kv: KVNamespace, chatId: number, lang: Lang): Promise<void> {
+  await kv.put(`lang:${chatId}`, lang);
 }

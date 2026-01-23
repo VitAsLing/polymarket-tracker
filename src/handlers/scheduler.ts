@@ -5,7 +5,7 @@
 import { shortenAddress } from '../utils/format.js';
 import { getUserActivity } from '../api/polymarket.js';
 import { sendTelegram } from '../api/telegram.js';
-import { getSubscriptions, getLastActivity, setLastActivity } from '../storage/kv.js';
+import { getSubscriptions, getLastActivity, setLastActivity, getLang } from '../storage/kv.js';
 import { formatActivityMessage } from '../messages/format.js';
 import type { Env, Subscription, CheckResult } from '../types/index.js';
 
@@ -50,7 +50,9 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
         // Send to all users who subscribed to this address
         for (const sub of subs) {
           const displayName = sub.alias || shortenAddress(address);
-          const message = formatActivityMessage(activity, displayName, address);
+          // Get user's language preference
+          const lang = await getLang(kv, sub.chatId);
+          const message = formatActivityMessage(activity, displayName, address, lang);
           if (message && sub.chatId) {
             const sent = await sendTelegram(botToken, sub.chatId, message);
             if (sent) {

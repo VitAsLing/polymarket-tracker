@@ -3,9 +3,10 @@
  */
 
 import { formatUSD, formatTimestamp, escapeMarkdown } from '../utils/format.js';
-import type { Activity } from '../types/index.js';
+import { t } from '../i18n/index.js';
+import type { Activity, Lang } from '../types/index.js';
 
-export function formatBuyMessage(activity: Activity, displayName: string, address: string): string {
+export function formatBuyMessage(activity: Activity, displayName: string, address: string, lang: Lang): string {
   const price = (activity.price * 100).toFixed(1);
   const cost = formatUSD(activity.usdcSize);
   const size = activity.size?.toFixed(1) || '0';
@@ -15,59 +16,59 @@ export function formatBuyMessage(activity: Activity, displayName: string, addres
     : '';
   const profileUrl = `https://polymarket.com/profile/${address}`;
 
-  return `🟢 *BUY* | [${escapeMarkdown(displayName)}](${profileUrl})
+  return `${t(lang, 'push.buy')} | [${escapeMarkdown(displayName)}](${profileUrl})
 
-📊 ${escapeMarkdown(activity.title || 'Unknown')}
+📊 ${escapeMarkdown(activity.title || t(lang, 'pos.unknown'))}
 🎯 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
 
-💵 Cost: ${cost}
-🎫 Shares: ${size}
-✨ If Win: ${potentialProfit} (${potentialPct})
+💵 ${t(lang, 'push.cost')}: ${cost}
+🎫 ${t(lang, 'push.shares')}: ${size}
+✨ ${t(lang, 'push.ifWin')}: ${potentialProfit} (${potentialPct})
 
 ⏰ ${formatTimestamp(activity.timestamp)}
-🔗 [Market](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [Tx](https://polygonscan.com/tx/${activity.transactionHash})`;
+🔗 [${t(lang, 'push.market')}](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [${t(lang, 'push.tx')}](https://polygonscan.com/tx/${activity.transactionHash})`;
 }
 
-export function formatSellMessage(activity: Activity, displayName: string, address: string): string {
+export function formatSellMessage(activity: Activity, displayName: string, address: string, lang: Lang): string {
   const price = (activity.price * 100).toFixed(1);
   const received = formatUSD(activity.usdcSize);
   const size = activity.size?.toFixed(1) || '0';
   const profileUrl = `https://polymarket.com/profile/${address}`;
 
-  return `🔴 *SELL* | [${escapeMarkdown(displayName)}](${profileUrl})
+  return `${t(lang, 'push.sell')} | [${escapeMarkdown(displayName)}](${profileUrl})
 
-📊 ${escapeMarkdown(activity.title || 'Unknown')}
+📊 ${escapeMarkdown(activity.title || t(lang, 'pos.unknown'))}
 🎯 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
 
-💵 Received: ${received}
-🎫 Shares: ${size}
+💵 ${t(lang, 'push.received')}: ${received}
+🎫 ${t(lang, 'push.shares')}: ${size}
 
 ⏰ ${formatTimestamp(activity.timestamp)}
-🔗 [Market](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [Tx](https://polygonscan.com/tx/${activity.transactionHash})`;
+🔗 [${t(lang, 'push.market')}](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [${t(lang, 'push.tx')}](https://polygonscan.com/tx/${activity.transactionHash})`;
 }
 
-export function formatRedeemMessage(activity: Activity, displayName: string, address: string): string {
+export function formatRedeemMessage(activity: Activity, displayName: string, address: string, lang: Lang): string {
   const redeemed = formatUSD(activity.usdcSize);
   const profileUrl = `https://polymarket.com/profile/${address}`;
 
-  return `✅ *REDEEM* | [${escapeMarkdown(displayName)}](${profileUrl})
+  return `${t(lang, 'push.redeem')} | [${escapeMarkdown(displayName)}](${profileUrl})
 
-📊 ${escapeMarkdown(activity.title || 'Unknown')}
-💵 Redeemed: ${redeemed}
+📊 ${escapeMarkdown(activity.title || t(lang, 'pos.unknown'))}
+💵 ${t(lang, 'push.redeemed')}: ${redeemed}
 
 ⏰ ${formatTimestamp(activity.timestamp)}
-🔗 [Market](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [Tx](https://polygonscan.com/tx/${activity.transactionHash})`;
+🔗 [${t(lang, 'push.market')}](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [${t(lang, 'push.tx')}](https://polygonscan.com/tx/${activity.transactionHash})`;
 }
 
-export function formatActivityMessage(activity: Activity, displayName: string, address: string): string | null {
+export function formatActivityMessage(activity: Activity, displayName: string, address: string, lang: Lang): string | null {
   if (activity.type === 'TRADE') {
     if (activity.side === 'BUY') {
-      return formatBuyMessage(activity, displayName, address);
+      return formatBuyMessage(activity, displayName, address, lang);
     } else {
-      return formatSellMessage(activity, displayName, address);
+      return formatSellMessage(activity, displayName, address, lang);
     }
   } else if (activity.type === 'REDEEM') {
-    return formatRedeemMessage(activity, displayName, address);
+    return formatRedeemMessage(activity, displayName, address, lang);
   }
   return null;
 }

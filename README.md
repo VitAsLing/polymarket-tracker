@@ -16,19 +16,21 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/
 - Real-time push notifications (BUY/SELL/REDEEM)
 - Query positions, PnL, portfolio value, leaderboard
 - Multi-user support (each user manages their own subscriptions)
+- Multi-language support (English/中文)
 
 ## Bot Commands
 
 | Command | Description |
 |---------|-------------|
-| `/subscribe <address> [alias]` | Subscribe to address |
-| `/unsubscribe <address>` | Unsubscribe |
+| `/sub <address> [alias]` | Subscribe to address |
+| `/unsub <address>` | Unsubscribe |
 | `/list` | List your subscriptions |
 | `/alias <address> <new_alias>` | Update alias |
 | `/pos [address/alias]` | Current positions |
 | `/pnl [address/alias]` | Realized PnL |
 | `/value [address/alias]` | Portfolio value |
 | `/rank [address/alias]` | Leaderboard ranking |
+| `/lang [en/zh]` | Switch language |
 
 ## Deployment
 

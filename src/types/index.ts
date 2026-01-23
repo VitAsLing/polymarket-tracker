@@ -2,6 +2,9 @@
  * Type definitions for Polymarket Tracker
  */
 
+// Language type
+export type Lang = 'en' | 'zh';
+
 // Environment bindings
 export interface Env {
   POLYMARKET_KV: KVNamespace;
