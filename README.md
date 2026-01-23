@@ -2,6 +2,13 @@
 
 Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/REDEEM).
 
+## Tech Stack
+
+- **Runtime**: Cloudflare Workers (serverless, free tier)
+- **Storage**: Cloudflare KV
+- **Bot**: Telegram Bot API (Webhook)
+- **Data**: Polymarket Data API
+
 ## Features
 
 - Subscribe to any Polymarket address
@@ -48,6 +55,12 @@ bunx wrangler deploy   # Deploy
 bunx wrangler tail     # View logs
 ```
 
+## Disclaimer
+
+This project is for informational purposes only. It is not financial advice. Use at your own risk. The authors are not responsible for any losses or damages.
+
 ## License
 
-[AGPL-3.0](LICENSE)
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html).
+
+See the [LICENSE](LICENSE) file for details.
