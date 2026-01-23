@@ -2,7 +2,7 @@
  * Message formatting for Telegram notifications
  */
 
-import { formatUSD, formatTimestamp, escapeMarkdown } from '../utils/format.js';
+import { formatUSD, formatTimestamp, escapeMarkdown, getMagnitude } from '../utils/format.js';
 import { t } from '../i18n/index.js';
 import type { Activity, Lang } from '../types/index.js';
 
@@ -21,7 +21,7 @@ export function formatBuyMessage(activity: Activity, displayName: string, addres
 📊 ${escapeMarkdown(activity.title || t(lang, 'pos.unknown'))}
 🎯 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
 
-💵 ${t(lang, 'push.cost')}: ${cost}
+💵 ${t(lang, 'push.cost')}: ${cost} ${getMagnitude(activity.usdcSize)}
 🎫 ${t(lang, 'push.shares')}: ${size}
 ✨ ${t(lang, 'push.ifWin')}: ${potentialProfit} (${potentialPct})
 
@@ -40,7 +40,7 @@ export function formatSellMessage(activity: Activity, displayName: string, addre
 📊 ${escapeMarkdown(activity.title || t(lang, 'pos.unknown'))}
 🎯 *${escapeMarkdown(activity.outcome || '')}* @ ${price}%
 
-💵 ${t(lang, 'push.received')}: ${received}
+💵 ${t(lang, 'push.received')}: ${received} ${getMagnitude(activity.usdcSize)}
 🎫 ${t(lang, 'push.shares')}: ${size}
 
 ⏰ ${formatTimestamp(activity.timestamp)}
@@ -54,7 +54,7 @@ export function formatRedeemMessage(activity: Activity, displayName: string, add
   return `${t(lang, 'push.redeem')} | [${escapeMarkdown(displayName)}](${profileUrl})
 
 📊 ${escapeMarkdown(activity.title || t(lang, 'pos.unknown'))}
-💵 ${t(lang, 'push.redeemed')}: ${redeemed}
+💵 ${t(lang, 'push.redeemed')}: ${redeemed} ${getMagnitude(activity.usdcSize)}
 
 ⏰ ${formatTimestamp(activity.timestamp)}
 🔗 [${t(lang, 'push.market')}](https://polymarket.com/event/${activity.eventSlug || activity.slug}) | [${t(lang, 'push.tx')}](https://polygonscan.com/tx/${activity.transactionHash})`;

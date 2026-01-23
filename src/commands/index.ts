@@ -2,7 +2,7 @@
  * Bot command handlers
  */
 
-import { shortenAddress, formatUSD, escapeMarkdown, formatPnL } from '../utils/format.js';
+import { shortenAddress, formatUSD, escapeMarkdown, formatPnL, getMagnitude } from '../utils/format.js';
 import {
   getUserActivity,
   getUserPositions,
@@ -230,7 +230,7 @@ export async function handleCommand(
         const result = await getUserValue(address);
         const value = formatUSD(result.value);
         const profileUrl = `https://polymarket.com/profile/${address}`;
-        return `💵 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.portfolioValue')}\n\n*${value}*`;
+        return `💵 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.portfolioValue')}\n\n*${value}* ${getMagnitude(result.value)}`;
       } catch (e) {
         console.error('Error getting value:', e);
         return t(lang, 'error.failedValue');

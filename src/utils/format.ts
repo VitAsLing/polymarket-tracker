@@ -47,7 +47,8 @@ export function getMagnitude(amount: number): string {
 
 /**
  * Format PnL with direction emoji and magnitude
- * e.g. 🟢💰💰💰 *+$5,000*
+ * e.g. 🟢 *+$5,000* 💰💰💰
+ * Magnitude at the end for better alignment
  */
 export function formatPnL(amount: number, includePercent?: number): string {
   const emoji = amount >= 0 ? '🟢' : '🔴';
@@ -57,7 +58,7 @@ export function formatPnL(amount: number, includePercent?: number): string {
 
   if (includePercent !== undefined) {
     const pctSign = includePercent >= 0 ? '+' : '';
-    return `${emoji}${magnitude} *${formatted} (${pctSign}${(includePercent * 100).toFixed(1)}%)*`;
+    return `${emoji} *${formatted} (${pctSign}${(includePercent * 100).toFixed(1)}%)* ${magnitude}`;
   }
-  return `${emoji}${magnitude} *${formatted}*`;
+  return `${emoji} *${formatted}* ${magnitude}`;
 }
