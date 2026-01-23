@@ -37,7 +37,7 @@ export const zh: Messages = {
 /rank [地址/别名] - 排行榜
 
 *设置:*
-/lang - 切换语言 (en/zh)
+/lang - 切换语言
 
 _地址格式: 0x..._`,
     alreadySubscribed: '⚠️ 已订阅',
@@ -95,7 +95,7 @@ _地址格式: 0x..._`,
 
   // Language
   lang: {
-    current: '🌐 当前语言: {lang}\n\n用法: /lang en | /lang zh',
+    select: '🌐 选择语言:',
     switched: '✅ 语言已切换为: {lang}',
     english: 'English',
     chinese: '中文',

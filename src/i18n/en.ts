@@ -35,7 +35,7 @@ export const en = {
 /rank [address/alias] - Leaderboard
 
 *Settings:*
-/lang - Switch language (en/zh)
+/lang - Switch language
 
 _Address format: 0x..._`,
     alreadySubscribed: '⚠️ Already subscribed',
@@ -93,7 +93,7 @@ _Address format: 0x..._`,
 
   // Language
   lang: {
-    current: '🌐 Current language: {lang}\n\nUsage: /lang en | /lang zh',
+    select: '🌐 Select language:',
     switched: '✅ Language switched to: {lang}',
     english: 'English',
     chinese: '中文',

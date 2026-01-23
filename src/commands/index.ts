@@ -16,17 +16,16 @@ import {
   setLastActivity,
   resolveAddressArg,
   getLang,
-  setLang,
 } from '../storage/kv.js';
-import { t, getLangName } from '../i18n/index.js';
-import type { Env, LeaderboardEntry, Lang } from '../types/index.js';
+import { t } from '../i18n/index.js';
+import type { Env, LeaderboardEntry, CommandResponse } from '../types/index.js';
 
 export async function handleCommand(
   command: string,
   args: string[],
   chatId: number,
   env: Env
-): Promise<string | null> {
+): Promise<string | CommandResponse | null> {
   const kv = env.POLYMARKET_KV;
   const lang = await getLang(kv, chatId);
 
@@ -276,15 +275,15 @@ export async function handleCommand(
     }
 
     case '/lang': {
-      if (!args[0]) {
-        return t(lang, 'lang.current', { lang: getLangName(lang) });
-      }
-      const newLang = args[0].toLowerCase();
-      if (newLang !== 'en' && newLang !== 'zh') {
-        return t(lang, 'error.langUsage');
-      }
-      await setLang(kv, chatId, newLang as Lang);
-      return t(newLang as Lang, 'lang.switched', { lang: getLangName(newLang as Lang) });
+      return {
+        text: t(lang, 'lang.select'),
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🇺🇸 English', callback_data: 'lang:en' },
+            { text: '🇨🇳 中文', callback_data: 'lang:zh' },
+          ]],
+        },
+      };
     }
 
     default:

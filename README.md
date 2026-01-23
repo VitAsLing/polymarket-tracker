@@ -30,7 +30,7 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/
 | `/pnl [address/alias]` | Realized PnL |
 | `/value [address/alias]` | Portfolio value |
 | `/rank [address/alias]` | Leaderboard ranking |
-| `/lang [en/zh]` | Switch language |
+| `/lang` | Switch language |
 
 ## Deployment
 

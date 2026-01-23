@@ -5,6 +5,12 @@
 // Language type
 export type Lang = 'en' | 'zh';
 
+// Command response with optional reply markup
+export interface CommandResponse {
+  text: string;
+  reply_markup?: object;
+}
+
 // Environment bindings
 export interface Env {
   POLYMARKET_KV: KVNamespace;
