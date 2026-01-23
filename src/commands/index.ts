@@ -162,12 +162,12 @@ _Address format: 0x..._`;
           const pnlPct = formatPercent(pos.percentPnl / 100);
           const size = pos.size?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0';
 
-          // Status emoji: ✅ redeemable (won), ❌ lost (price near 0), empty otherwise
+          // Status emoji: ❌ lost (price near 0), ✅ redeemable (won), empty otherwise
           let statusEmoji = '';
-          if (pos.redeemable) {
-            statusEmoji = '✅ ';
-          } else if (pos.curPrice <= 0.01) {
+          if (pos.curPrice <= 0.01) {
             statusEmoji = '❌ ';
+          } else if (pos.redeemable) {
+            statusEmoji = '✅ ';
           }
 
           const marketUrl = pos.eventSlug || pos.slug
