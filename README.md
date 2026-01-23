@@ -1,6 +1,12 @@
-# Polymarket Smart Money Tracker v2.0
+# Polymarket Smart Money Tracker v2.1
 
 Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/REDEEM).
+
+**Features:**
+- Multi-user support (each user manages their own subscriptions)
+- Real-time notifications (BUY/SELL/REDEEM)
+- Query positions, PnL, portfolio value, leaderboard ranking
+- Optimized API calls (same address only fetched once)
 
 ## Architecture
 
@@ -39,6 +45,7 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL/
 | `/rank [address/alias]` | Leaderboard ranking |
 
 > If you have only one subscription, address/alias can be omitted
+> Each user can only see and manage their own subscriptions
 
 ## Message Examples
 

@@ -238,12 +238,15 @@ async function setLastActivity(kv, address, timestamp) {
 
 // ============ Address Resolution ============
 
-async function resolveAddressArg(arg, kv) {
+async function resolveAddressArg(arg, kv, chatId) {
+  // Get user's own subscriptions
+  const allSubscriptions = await getSubscriptions(kv);
+  const userSubscriptions = allSubscriptions.filter((s) => s.chatId === chatId);
+
   if (!arg) {
-    // If no arg, check if there's only one subscription
-    const subscriptions = await getSubscriptions(kv);
-    if (subscriptions.length === 1) {
-      const sub = subscriptions[0];
+    // If no arg, check if user has only one subscription
+    if (userSubscriptions.length === 1) {
+      const sub = userSubscriptions[0];
       return {
         address: sub.address,
         displayName: sub.alias || shortenAddress(sub.address),
@@ -260,9 +263,8 @@ async function resolveAddressArg(arg, kv) {
     };
   }
 
-  // Find by alias
-  const subscriptions = await getSubscriptions(kv);
-  const sub = subscriptions.find(
+  // Find by alias (only in user's own subscriptions)
+  const sub = userSubscriptions.find(
     (s) => s.alias && s.alias.toLowerCase() === arg.toLowerCase()
   );
 
@@ -310,7 +312,8 @@ _Address format: 0x..._`;
       }
 
       const subscriptions = await getSubscriptions(kv);
-      const existing = subscriptions.find((s) => s.address === address);
+      // Only check if current user already subscribed to this address
+      const existing = subscriptions.find((s) => s.address === address && s.chatId === chatId);
       if (existing) {
         return `⚠️ Already subscribed: ${existing.alias || shortenAddress(address)}`;
       }
@@ -349,7 +352,8 @@ _Address format: 0x..._`;
       }
       const address = args[0].toLowerCase();
       const subscriptions = await getSubscriptions(kv);
-      const index = subscriptions.findIndex((s) => s.address === address);
+      // Only find in current user's subscriptions
+      const index = subscriptions.findIndex((s) => s.address === address && s.chatId === chatId);
 
       if (index === -1) {
         return '❌ Subscription not found';
@@ -357,13 +361,14 @@ _Address format: 0x..._`;
 
       const removed = subscriptions.splice(index, 1)[0];
       await saveSubscriptions(kv, subscriptions);
-      await kv.delete(`last_activity:${address}`);
 
       return `✅ Unsubscribed: ${removed.alias || shortenAddress(address)}`;
     }
 
     case '/list': {
-      const subscriptions = await getSubscriptions(kv);
+      const allSubscriptions = await getSubscriptions(kv);
+      // Only show current user's subscriptions
+      const subscriptions = allSubscriptions.filter((s) => s.chatId === chatId);
       if (subscriptions.length === 0) {
         return '📋 No subscriptions\n\nUse /subscribe to add';
       }
@@ -384,7 +389,8 @@ _Address format: 0x..._`;
       const newAlias = args.slice(1).join(' ');
 
       const subscriptions = await getSubscriptions(kv);
-      const sub = subscriptions.find((s) => s.address === address);
+      // Only find in current user's subscriptions
+      const sub = subscriptions.find((s) => s.address === address && s.chatId === chatId);
       if (!sub) {
         return '❌ Subscription not found';
       }
@@ -395,7 +401,7 @@ _Address format: 0x..._`;
     }
 
     case '/pos': {
-      const { address, displayName } = await resolveAddressArg(args[0], kv);
+      const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return '❌ Please provide address or alias: /pos 0x...';
       }
@@ -429,7 +435,7 @@ _Address format: 0x..._`;
     }
 
     case '/pnl': {
-      const { address, displayName } = await resolveAddressArg(args[0], kv);
+      const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return '❌ Please provide address or alias: /pnl 0x...';
       }
@@ -467,7 +473,7 @@ _Address format: 0x..._`;
     }
 
     case '/value': {
-      const { address, displayName } = await resolveAddressArg(args[0], kv);
+      const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return '❌ Please provide address or alias: /value 0x...';
       }
@@ -483,7 +489,7 @@ _Address format: 0x..._`;
     }
 
     case '/rank': {
-      const { address, displayName } = await resolveAddressArg(args[0], kv);
+      const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return '❌ Please provide address or alias: /rank 0x...';
       }
@@ -561,13 +567,24 @@ async function checkSubscriptions(env) {
     return { total: 0, processed: 0, notified: 0 };
   }
 
+  // Group subscriptions by address (to avoid duplicate API calls)
+  const addressMap = new Map();
+  for (const sub of subscriptions) {
+    const addr = sub.address.toLowerCase();
+    if (!addressMap.has(addr)) {
+      addressMap.set(addr, []);
+    }
+    addressMap.get(addr).push(sub);
+  }
+
   let totalProcessed = 0;
   let totalNotified = 0;
 
-  for (const sub of subscriptions) {
+  // Process each unique address once
+  for (const [address, subs] of addressMap) {
     try {
-      const lastActivity = await getLastActivity(kv, sub.address);
-      const activities = await getUserActivity(sub.address, { limit: 20 });
+      const lastActivity = await getLastActivity(kv, address);
+      const activities = await getUserActivity(address, { limit: 20 });
 
       // Filter new activities
       const newActivities = activities.filter((a) => a.timestamp > lastActivity);
@@ -576,33 +593,35 @@ async function checkSubscriptions(env) {
       // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
-      const displayName = sub.alias || shortenAddress(sub.address);
       let maxTimestamp = lastActivity;
 
       for (const activity of newActivities) {
-        const message = formatActivityMessage(activity, displayName);
-        if (message && sub.chatId) {
-          const sent = await sendTelegram(botToken, sub.chatId, message);
-          if (sent) {
-            totalNotified++;
-            console.log(`Notified: ${activity.type} ${activity.transactionHash}`);
+        // Send to all users who subscribed to this address
+        for (const sub of subs) {
+          const displayName = sub.alias || shortenAddress(address);
+          const message = formatActivityMessage(activity, displayName);
+          if (message && sub.chatId) {
+            const sent = await sendTelegram(botToken, sub.chatId, message);
+            if (sent) {
+              totalNotified++;
+            }
+            // Avoid Telegram rate limit
+            await new Promise((r) => setTimeout(r, 100));
           }
-          // Avoid Telegram rate limit
-          await new Promise((r) => setTimeout(r, 100));
         }
         maxTimestamp = Math.max(maxTimestamp, activity.timestamp);
         totalProcessed++;
       }
 
       if (maxTimestamp > lastActivity) {
-        await setLastActivity(kv, sub.address, maxTimestamp);
+        await setLastActivity(kv, address, maxTimestamp);
       }
     } catch (error) {
-      console.error(`Error checking ${sub.address}:`, error);
+      console.error(`Error checking ${address}:`, error);
     }
   }
 
-  return { total: subscriptions.length, processed: totalProcessed, notified: totalNotified };
+  return { total: subscriptions.length, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
 }
 
 // ============ HTTP Handler ============
