@@ -11,7 +11,13 @@ export async function getSubscriptions(kv: KVNamespace): Promise<Subscription[]>
 }
 
 export async function saveSubscriptions(kv: KVNamespace, subscriptions: Subscription[]): Promise<void> {
-  await kv.put('subscriptions', JSON.stringify(subscriptions));
+  // 按 chatId + address 去重，保留最新的（后面的）
+  const seen = new Map<string, Subscription>();
+  for (const sub of subscriptions) {
+    const key = `${sub.chatId}:${sub.address.toLowerCase()}`;
+    seen.set(key, sub);
+  }
+  await kv.put('subscriptions', JSON.stringify([...seen.values()]));
 }
 
 export async function getLastActivity(kv: KVNamespace, address: string): Promise<number> {

@@ -74,9 +74,8 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       let maxTimestamp = lastActivity;
 
       for (const activity of newActivities) {
-        // Send to all users who subscribed to this address
-        for (const sub of subs) {
-          const subInfo = subInfoMap.get(sub.chatId)!;
+        // Send to all users who subscribed to this address (deduplicated by chatId)
+        for (const [chatId, subInfo] of subInfoMap) {
           // 只推送订阅之后的活动（addedAt 是毫秒，timestamp 是秒）
           if (activity.timestamp <= subInfo.addedAtSec) {
             continue;
@@ -84,8 +83,8 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
 
           const { displayName, lang } = subInfo;
           const message = formatActivityMessage(activity, displayName, address, lang);
-          if (message && sub.chatId) {
-            const sent = await sendTelegram(botToken, sub.chatId, message);
+          if (message) {
+            const sent = await sendTelegram(botToken, chatId, message);
             if (sent) {
               totalNotified++;
             }

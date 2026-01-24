@@ -19,10 +19,10 @@ import {
   resolveAddressArg,
   getLang,
 } from '../storage/kv.js';
-
-const MAX_SUBSCRIPTIONS = 10;
 import { t } from '../i18n/index.js';
 import type { Env, LeaderboardEntry, CommandResponse } from '../types/index.js';
+
+const MAX_SUBSCRIPTIONS = 10;
 
 export async function handleCommand(
   command: string,
