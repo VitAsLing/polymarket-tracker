@@ -12,11 +12,12 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL)
 
 ## Features
 
-- Subscribe to any Polymarket address (max 10 per user)
+- Subscribe to any Polymarket address (max 20 per user)
 - Real-time push notifications (BUY/SELL)
-- Query positions, PnL, portfolio value, leaderboard
+- Query positions, PnL, portfolio value, leaderboard (with pagination)
 - Multi-user support (each user manages their own subscriptions)
 - Multi-language support (English/中文)
+- Parallel API requests for better performance
 
 ## Bot Commands
 

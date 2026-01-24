@@ -3,8 +3,8 @@
  */
 
 import { sendTelegram, answerCallbackQuery, editMessageText } from '../api/telegram.js';
-import { handleCommand } from '../commands/index.js';
-import { setLang } from '../storage/kv.js';
+import { handleCommand, getPositionsPage, getPnlPage } from '../commands/index.js';
+import { setLang, getLang, resolveAddressArg } from '../storage/kv.js';
 import { t, getLangName } from '../i18n/index.js';
 import type { Env, Lang } from '../types/index.js';
 
@@ -68,7 +68,6 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
     return new Response('OK');
   } catch (error) {
     console.error('Webhook error:', error);
-    // 始终返回 200，防止 Telegram 重试导致重复执行
     return new Response('OK');
   }
 }
@@ -85,12 +84,19 @@ async function handleCallbackQuery(
 
   const chatId = message.chat.id;
   const messageId = message.message_id;
+  const kv = env.POLYMARKET_KV;
+
+  // Handle noop (page number button)
+  if (data === 'noop') {
+    await answerCallbackQuery(env.TG_BOT_TOKEN, id);
+    return;
+  }
 
   // Handle language switch
   if (data.startsWith('lang:')) {
     const newLang = data.split(':')[1] as Lang;
     if (newLang === 'en' || newLang === 'zh') {
-      await setLang(env.POLYMARKET_KV, from.id, newLang);
+      await setLang(kv, from.id, newLang);
       const text = t(newLang, 'lang.switched', { lang: getLangName(newLang) });
       await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, text);
       await answerCallbackQuery(env.TG_BOT_TOKEN, id);
@@ -98,15 +104,41 @@ async function handleCallbackQuery(
     }
   }
 
+  const parts = data.split(':');
+  const action = parts[0];
+  const address = parts[1];
+  const page = parts[2] ? parseInt(parts[2], 10) : undefined;
+
+  // Handle pagination for pos and pnl
+  if ((action === 'pos' || action === 'pnl') && address && page !== undefined) {
+    await answerCallbackQuery(env.TG_BOT_TOKEN, id);
+    const lang = await getLang(kv, chatId);
+    const { displayName } = await resolveAddressArg(address, kv, chatId);
+    const name = displayName || address.slice(0, 6) + '...' + address.slice(-4);
+
+    try {
+      const response = action === 'pos'
+        ? await getPositionsPage(address, name, page, lang)
+        : await getPnlPage(address, name, page, lang);
+
+      await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, response.text, {
+        reply_markup: response.reply_markup,
+      });
+    } catch (e) {
+      console.error(`Error getting ${action} page:`, e);
+    }
+    return;
+  }
+
   // Handle commands with address selection (pos, pnl, value, rank, unsub)
   const queryCommands = ['pos', 'pnl', 'value', 'rank', 'unsub'];
-  const [action, address] = data.split(':');
   if (queryCommands.includes(action) && address) {
     await answerCallbackQuery(env.TG_BOT_TOKEN, id);
     const response = await handleCommand(`/${action}`, [address], chatId, env);
     if (response) {
       const text = typeof response === 'string' ? response : response.text;
-      await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, text);
+      const reply_markup = typeof response === 'string' ? undefined : response.reply_markup;
+      await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, text, { reply_markup });
     }
     return;
   }

@@ -41,7 +41,7 @@ export async function getUserActivity(address: string, options: ActivityOptions 
   return polymarketRequest<Activity[]>('/activity', {
     user: address,
     type: 'TRADE',
-    limit: options.limit || 50,
+    limit: options.limit || 100,
     sortBy: 'TIMESTAMP',
     sortDirection: 'DESC',
     ...options,
@@ -50,6 +50,7 @@ export async function getUserActivity(address: string, options: ActivityOptions 
 
 interface PositionOptions {
   limit?: number;
+  offset?: number;
   sortBy?: string;
   [key: string]: string | number | undefined;
 }
@@ -57,7 +58,8 @@ interface PositionOptions {
 export async function getUserPositions(address: string, options: PositionOptions = {}): Promise<Position[]> {
   return polymarketRequest<Position[]>('/positions', {
     user: address,
-    limit: options.limit || 20,
+    limit: options.limit || 10,
+    offset: options.offset || 0,
     sortBy: options.sortBy || 'CURRENT',
     sortDirection: 'DESC',
     sizeThreshold: 1,
@@ -72,6 +74,7 @@ export async function getUserValue(address: string): Promise<PortfolioValue> {
 
 interface ClosedPositionOptions {
   limit?: number;
+  offset?: number;
   sortBy?: string;
   [key: string]: string | number | undefined;
 }
@@ -79,7 +82,8 @@ interface ClosedPositionOptions {
 export async function getClosedPositions(address: string, options: ClosedPositionOptions = {}): Promise<ClosedPosition[]> {
   return polymarketRequest<ClosedPosition[]>('/v1/closed-positions', {
     user: address,
-    limit: options.limit || 20,
+    limit: options.limit || 10,
+    offset: options.offset || 0,
     sortBy: options.sortBy || 'REALIZEDPNL',
     sortDirection: 'DESC',
     ...options,

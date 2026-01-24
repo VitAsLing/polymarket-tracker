@@ -20,11 +20,10 @@ import {
   type SubRecord,
 } from '../storage/kv.js';
 import { t } from '../i18n/index.js';
-import type { Env, LeaderboardEntry, CommandResponse } from '../types/index.js';
+import type { Env, LeaderboardEntry, CommandResponse, Lang } from '../types/index.js';
 
 // 生成订阅选择的 inline keyboard
 function buildSubscriptionKeyboard(subscriptions: SubRecord[], action: string) {
-  // 每行 1 个按钮
   const rows = subscriptions.map((sub) => [{
     text: sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`,
     callback_data: `${action}:${sub.address}`,
@@ -32,7 +31,145 @@ function buildSubscriptionKeyboard(subscriptions: SubRecord[], action: string) {
   return { inline_keyboard: rows };
 }
 
-const MAX_SUBSCRIPTIONS = 10;
+// 生成分页键盘
+function buildPaginationKeyboard(action: string, address: string, page: number, hasMore: boolean, lang: Lang) {
+  const buttons: { text: string; callback_data: string }[] = [];
+
+  if (page > 0) {
+    buttons.push({
+      text: lang === 'zh' ? '◀️ 上一页' : '◀️ Prev',
+      callback_data: `${action}:${address}:${page - 1}`,
+    });
+  }
+
+  buttons.push({
+    text: `${page + 1}`,
+    callback_data: 'noop',
+  });
+
+  if (hasMore) {
+    buttons.push({
+      text: lang === 'zh' ? '下一页 ▶️' : 'Next ▶️',
+      callback_data: `${action}:${address}:${page + 1}`,
+    });
+  }
+
+  return buttons.length > 1 ? { inline_keyboard: [buttons] } : undefined;
+}
+
+const MAX_SUBSCRIPTIONS = 20;
+const PAGE_SIZE = 10;
+
+/**
+ * 获取持仓分页数据
+ */
+export async function getPositionsPage(
+  address: string,
+  displayName: string,
+  page: number,
+  lang: Lang
+): Promise<CommandResponse> {
+  const offset = page * PAGE_SIZE;
+  // 多请求一条用于判断是否有下一页
+  const positions = await getUserPositions(address, { limit: PAGE_SIZE + 1, offset });
+
+  if (!positions || positions.length === 0) {
+    const profileUrl = `https://polymarket.com/profile/${address}`;
+    if (page === 0) {
+      return { text: `📋 [${escapeMarkdown(displayName)}](${profileUrl}) ${t(lang, 'cmd.noPositions')}` };
+    }
+    return { text: t(lang, 'page.noMore') };
+  }
+
+  const hasMore = positions.length > PAGE_SIZE;
+  const pageData = positions.slice(0, PAGE_SIZE);
+
+  const profileUrl = `https://polymarket.com/profile/${address}`;
+  let msg = `📋 [${escapeMarkdown(displayName)}](${profileUrl}) ${t(lang, 'cmd.positions')}\n\n`;
+
+  pageData.forEach((pos, i) => {
+    const idx = offset + i + 1;
+    const curPrice = (pos.curPrice * 100).toFixed(1);
+    const avgPrice = (pos.avgPrice * 100).toFixed(1);
+    const currentValue = formatUSD(pos.currentValue);
+    const initialValue = formatUSD(pos.initialValue);
+    const pnlAmount = pos.currentValue - pos.initialValue;
+    const pnlPct = pos.percentPnl / 100;
+    const size = pos.size?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0';
+
+    let statusEmoji = '';
+    if (pos.curPrice <= 0.01) {
+      statusEmoji = '❌ ';
+    } else if (pos.redeemable) {
+      statusEmoji = '✅ ';
+    }
+
+    const marketUrl = pos.eventSlug || pos.slug
+      ? `https://polymarket.com/event/${pos.eventSlug || pos.slug}`
+      : null;
+
+    msg += `${idx}. ${statusEmoji}*${escapeMarkdown((pos.title || t(lang, 'pos.unknown')).substring(0, 50))}*\n`;
+    msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${curPrice}% (${t(lang, 'pos.avg')}: ${avgPrice}%)\n`;
+    msg += `   💵 ${currentValue} ← ${initialValue}\n`;
+    msg += `   ${formatPnL(pnlAmount, pnlPct)}\n`;
+    msg += `   🎫 ${size} ${t(lang, 'pos.shares')}\n`;
+    if (marketUrl) {
+      msg += `   🔗 [${t(lang, 'push.market')}](${marketUrl})\n`;
+    }
+    msg += '\n';
+  });
+
+  const keyboard = buildPaginationKeyboard('pos', address, page, hasMore, lang);
+  return { text: msg, reply_markup: keyboard };
+}
+
+/**
+ * 获取已平仓分页数据
+ */
+export async function getPnlPage(
+  address: string,
+  displayName: string,
+  page: number,
+  lang: Lang
+): Promise<CommandResponse> {
+  const offset = page * PAGE_SIZE;
+  const closed = await getClosedPositions(address, { limit: PAGE_SIZE + 1, offset });
+
+  if (!closed || closed.length === 0) {
+    const profileUrl = `https://polymarket.com/profile/${address}`;
+    if (page === 0) {
+      return { text: `📋 [${escapeMarkdown(displayName)}](${profileUrl}) ${t(lang, 'cmd.noClosedPositions')}` };
+    }
+    return { text: t(lang, 'page.noMore') };
+  }
+
+  const hasMore = closed.length > PAGE_SIZE;
+  const pageData = closed.slice(0, PAGE_SIZE);
+
+  const profileUrl = `https://polymarket.com/profile/${address}`;
+  let totalPnl = 0;
+  let msg = `📋 [${escapeMarkdown(displayName)}](${profileUrl}) ${t(lang, 'cmd.realizedPnl')}\n\n`;
+
+  pageData.forEach((pos, i) => {
+    const idx = offset + i + 1;
+    const pnl = pos.realizedPnl || 0;
+    totalPnl += pnl;
+    const statusEmoji = pnl >= 0 ? '✅ ' : '❌ ';
+    const avgPrice = ((pos.avgPrice || 0) * 100).toFixed(1);
+    const date = pos.timestamp ? new Date(pos.timestamp * 1000).toISOString().substring(0, 10) : '';
+
+    msg += `${idx}. ${statusEmoji}*${escapeMarkdown((pos.title || t(lang, 'pos.unknown')).substring(0, 50))}*\n`;
+    msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${avgPrice}%\n`;
+    msg += `   ${formatPnL(pnl)}\n`;
+    if (date) msg += `   📅 ${date}\n`;
+    msg += '\n';
+  });
+
+  msg += `🧮 ${t(lang, 'page.pageTotal')}: ${formatPnL(totalPnl)}`;
+
+  const keyboard = buildPaginationKeyboard('pnl', address, page, hasMore, lang);
+  return { text: msg, reply_markup: keyboard };
+}
 
 export async function handleCommand(
   command: string,
@@ -63,7 +200,6 @@ export async function handleCommand(
         return `${t(lang, 'cmd.alreadySubscribed')}: ${existing.alias || shortenAddress(address)}`;
       }
 
-      // 检查订阅数量限制
       if (userSubs.length >= MAX_SUBSCRIPTIONS) {
         return t(lang, 'error.maxSubscriptions');
       }
@@ -152,7 +288,6 @@ export async function handleCommand(
     }
 
     case '/pos': {
-      // 如果没有参数，检查是否需要显示选择列表
       if (!args[0]) {
         const userSubs = await getUserSubscriptions(kv, chatId);
         if (userSubs.length === 0) {
@@ -171,46 +306,7 @@ export async function handleCommand(
       }
 
       try {
-        const positions = await getUserPositions(address);
-        if (!positions || positions.length === 0) {
-          const profileUrl = `https://polymarket.com/profile/${address}`;
-          return `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.noPositions')}`;
-        }
-
-        const profileUrl = `https://polymarket.com/profile/${address}`;
-        let msg = `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.positions')}\n\n`;
-        positions.slice(0, 20).forEach((pos, i) => {
-          const curPrice = (pos.curPrice * 100).toFixed(1);
-          const avgPrice = (pos.avgPrice * 100).toFixed(1);
-          const currentValue = formatUSD(pos.currentValue);
-          const initialValue = formatUSD(pos.initialValue);
-          const pnlAmount = pos.currentValue - pos.initialValue;
-          const pnlPct = pos.percentPnl / 100;
-          const size = pos.size?.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0';
-
-          // Status emoji: ❌ lost (price near 0), ✅ redeemable (won), empty otherwise
-          let statusEmoji = '';
-          if (pos.curPrice <= 0.01) {
-            statusEmoji = '❌ ';
-          } else if (pos.redeemable) {
-            statusEmoji = '✅ ';
-          }
-
-          const marketUrl = pos.eventSlug || pos.slug
-            ? `https://polymarket.com/event/${pos.eventSlug || pos.slug}`
-            : null;
-
-          msg += `${i + 1}. ${statusEmoji}*${escapeMarkdown((pos.title || t(lang, 'pos.unknown')).substring(0, 50))}*\n`;
-          msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${curPrice}% (${t(lang, 'pos.avg')}: ${avgPrice}%)\n`;
-          msg += `   💵 ${currentValue} ← ${initialValue}\n`;
-          msg += `   ${formatPnL(pnlAmount, pnlPct)}\n`;
-          msg += `   🎫 ${size} ${t(lang, 'pos.shares')}\n`;
-          if (marketUrl) {
-            msg += `   🔗 [${t(lang, 'push.market')}](${marketUrl})\n`;
-          }
-          msg += '\n';
-        });
-        return msg;
+        return await getPositionsPage(address, displayName!, 0, lang);
       } catch (e) {
         console.error('Error getting positions:', e);
         return t(lang, 'error.failedPositions');
@@ -236,30 +332,7 @@ export async function handleCommand(
       }
 
       try {
-        const closed = await getClosedPositions(address);
-        if (!closed || closed.length === 0) {
-          const profileUrl = `https://polymarket.com/profile/${address}`;
-          return `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.noClosedPositions')}`;
-        }
-
-        const profileUrl = `https://polymarket.com/profile/${address}`;
-        let totalPnl = 0;
-        let msg = `📋 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.realizedPnl')}\n\n`;
-        closed.slice(0, 20).forEach((pos, i) => {
-          const pnl = pos.realizedPnl || 0;
-          totalPnl += pnl;
-          const statusEmoji = pnl >= 0 ? '✅ ' : '❌ ';
-          const avgPrice = ((pos.avgPrice || 0) * 100).toFixed(1);
-          const date = pos.timestamp ? new Date(pos.timestamp * 1000).toISOString().substring(0, 10) : '';
-
-          msg += `${i + 1}. ${statusEmoji}*${escapeMarkdown((pos.title || t(lang, 'pos.unknown')).substring(0, 50))}*\n`;
-          msg += `   🎯 ${escapeMarkdown(pos.outcome || '')} @ ${avgPrice}%\n`;
-          msg += `   ${formatPnL(pnl)}\n`;
-          if (date) msg += `   📅 ${date}\n`;
-          msg += '\n';
-        });
-        msg += `🧮 ${t(lang, 'cmd.total')}: ${formatPnL(totalPnl)}`;
-        return msg;
+        return await getPnlPage(address, displayName!, 0, lang);
       } catch (e) {
         console.error('Error getting closed positions:', e);
         return t(lang, 'error.failedPnl');
@@ -366,14 +439,12 @@ export async function handleCommand(
       const currentThreshold = await getThreshold(kv, chatId);
 
       if (!args[0]) {
-        // 显示当前阈值
         if (currentThreshold <= 0) {
           return t(lang, 'threshold.none');
         }
         return t(lang, 'threshold.current').replace('{amount}', currentThreshold.toString());
       }
 
-      // 解析金额
       const amount = parseFloat(args[0]);
       if (isNaN(amount) || amount < 0) {
         return t(lang, 'error.thresholdInvalid');

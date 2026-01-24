@@ -15,7 +15,7 @@ export const en = {
     failedValue: '❌ Failed to get value',
     failedRank: '❌ Failed to get rank',
     langUsage: '❌ Supported: en, zh',
-    maxSubscriptions: '❌ Max 10 subscriptions reached. Use /unsub to remove some.',
+    maxSubscriptions: '❌ Max 20 subscriptions reached. Use /unsub to remove some.',
     thresholdInvalid: '❌ Invalid amount. Usage: /th 100 (or /th 0 to disable)',
   },
 
@@ -113,6 +113,12 @@ _Address format: 0x..._`,
     none: '💰 Threshold disabled (all trades pushed)',
     set: '✅ Threshold set to {amount}',
     disabled: '✅ Threshold disabled (all trades pushed)',
+  },
+
+  // Pagination
+  page: {
+    noMore: '📋 No more data',
+    pageTotal: 'Page total',
   },
 };
 

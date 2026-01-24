@@ -10,24 +10,45 @@ import {
   getAllLastActivities,
   saveLastActivities,
   getAllUserConfigs,
-  migrateOldData,
   type SubRecord,
   type UserConfig,
 } from '../storage/kv.js';
 import { formatActivityMessage } from '../messages/format.js';
 import type { Env, CheckResult, Lang } from '../types/index.js';
 
+// 并发限制（考虑 CF Worker 子请求限制）
+const API_CONCURRENCY = 10;
+
 // 带 chatId 的订阅信息（用于按地址分组后保留用户信息）
 interface SubWithChat extends SubRecord {
   chatId: number;
 }
 
+// 简单的并发控制器
+async function parallelLimit<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  concurrency: number
+): Promise<void> {
+  const executing = new Set<Promise<void>>();
+
+  for (const item of items) {
+    const p = fn(item).finally(() => {
+      executing.delete(p);
+    });
+    executing.add(p);
+
+    if (executing.size >= concurrency) {
+      await Promise.race(executing);
+    }
+  }
+
+  await Promise.all(executing);
+}
+
 export async function checkSubscriptions(env: Env): Promise<CheckResult> {
   const kv = env.POLYMARKET_KV;
   const botToken = env.TG_BOT_TOKEN;
-
-  // 先执行数据迁移（如果有旧数据）
-  await migrateOldData(kv);
 
   // 读取所有用户订阅（Map<chatId, SubRecord[]>）
   const userSubsMap = await getAllUserSubscriptions(kv);
@@ -64,11 +85,18 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
   // 默认用户配置
   const defaultConfig: UserConfig = { lang: 'en', threshold: 10 };
 
+  // 待发送的消息队列（带时间戳用于排序）
+  interface PendingMessage {
+    chatId: number;
+    message: string;
+    timestamp: number;  // 活动时间戳，用于按时间排序
+  }
+  const pendingMessages: PendingMessage[] = [];
   let totalProcessed = 0;
-  let totalNotified = 0;
 
-  // Process each unique address once
-  for (const [address, subs] of addressMap) {
+  // 定义处理单个地址的函数
+  const processAddress = async (entry: [string, SubWithChat[]]): Promise<void> => {
+    const [address, subs] = entry;
     try {
       const lastActivity = allLastActivities[address] || 0;
 
@@ -81,7 +109,7 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
         } else {
           // 老数据没有 addedAt，初始化 lastActivity 并跳过本次检查
           allLastActivities[address] = Math.floor(Date.now() / 1000);
-          continue;
+          return;
         }
       }
 
@@ -89,7 +117,7 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
 
       // Filter new activities (based on lastActivity for efficiency)
       const newActivities = activities.filter((a) => a.timestamp > lastActivity);
-      if (newActivities.length === 0) continue;
+      if (newActivities.length === 0) return;
 
       // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
@@ -112,7 +140,7 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       let maxTimestamp = lastActivity;
 
       for (const activity of newActivities) {
-        // Send to all users who subscribed to this address (deduplicated by chatId)
+        // Collect messages for all users who subscribed to this address
         for (const [chatId, subInfo] of subInfoMap) {
           // 只推送 BUY/SELL，跳过 REDEEM
           if (activity.type !== 'TRADE') {
@@ -132,12 +160,7 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
           const { displayName, lang } = subInfo;
           const message = formatActivityMessage(activity, displayName, address, lang);
           if (message) {
-            const sent = await sendTelegram(botToken, chatId, message);
-            if (sent) {
-              totalNotified++;
-            }
-            // Avoid Telegram rate limit (with jitter)
-            await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
+            pendingMessages.push({ chatId, message, timestamp: activity.timestamp });
           }
         }
         maxTimestamp = Math.max(maxTimestamp, activity.timestamp);
@@ -150,6 +173,24 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
     } catch (error) {
       console.error(`Error checking ${address}:`, error);
     }
+  };
+
+  // 并行处理所有地址（限制并发数）
+  const addressEntries = Array.from(addressMap.entries());
+  await parallelLimit(addressEntries, processAddress, API_CONCURRENCY);
+
+  // 按活动时间排序（旧→新），保证消息按时间顺序发送
+  pendingMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+  // 串行发送所有消息（避免 Telegram 限流）
+  let totalNotified = 0;
+  for (const { chatId, message } of pendingMessages) {
+    const sent = await sendTelegram(botToken, chatId, message);
+    if (sent) {
+      totalNotified++;
+    }
+    // Avoid Telegram rate limit (with jitter)
+    await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
   }
 
   // 保存更新 + 清理孤儿数据
