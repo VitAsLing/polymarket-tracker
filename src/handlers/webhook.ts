@@ -60,7 +60,8 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
     return new Response('OK');
   } catch (error) {
     console.error('Webhook error:', error);
-    return new Response('Error', { status: 500 });
+    // 始终返回 200，防止 Telegram 重试导致重复执行
+    return new Response('OK');
   }
 }
 
