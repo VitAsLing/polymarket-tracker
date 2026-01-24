@@ -51,7 +51,7 @@ export function getMagnitude(amount: number): string {
  * Magnitude at the end for better alignment
  */
 export function formatPnL(amount: number, includePercent?: number): string {
-  const emoji = amount >= 0 ? '🟢' : '🔴';
+  const emoji = amount >= 0 ? '🤑' : '😭';
   const magnitude = getMagnitude(amount);
   const sign = amount >= 0 ? '+' : '';
   const formatted = `${sign}${formatUSD(amount)}`;
