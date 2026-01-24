@@ -25,6 +25,14 @@ interface TelegramUpdate {
 }
 
 export async function handleWebhook(request: Request, env: Env): Promise<Response> {
+  // Verify Telegram secret token if configured
+  if (env.WEBHOOK_SECRET) {
+    const token = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+    if (token !== env.WEBHOOK_SECRET) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+  }
+
   try {
     const update = await request.json() as TelegramUpdate;
 

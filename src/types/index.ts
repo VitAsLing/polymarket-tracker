@@ -15,6 +15,7 @@ export interface CommandResponse {
 export interface Env {
   POLYMARKET_KV: KVNamespace;
   TG_BOT_TOKEN: string;
+  WEBHOOK_SECRET?: string; // Optional: Telegram webhook secret token
 }
 
 // Subscription data structure

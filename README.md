@@ -42,14 +42,15 @@ bun install
 # 2. Create KV (copy id to wrangler.toml)
 bunx wrangler kv:namespace create "POLYMARKET_KV"
 
-# 3. Set Bot Token
+# 3. Set secrets
 bunx wrangler secret put TG_BOT_TOKEN
+bunx wrangler secret put WEBHOOK_SECRET  # Generate with: openssl rand -hex 32
 
 # 4. Deploy
 bunx wrangler deploy
 
 # 5. Set Telegram Webhook (visit in browser)
-# https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<worker>.workers.dev/webhook
+# https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<WORKER>.workers.dev/webhook&secret_token=<SECRET>
 ```
 
 ## Development
