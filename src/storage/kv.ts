@@ -22,17 +22,72 @@ export async function saveSubscriptions(kv: KVNamespace, subscriptions: Subscrip
   await kv.put('subscriptions', JSON.stringify([...seen.values()]));
 }
 
-export async function getLastActivity(kv: KVNamespace, address: string): Promise<number> {
-  const key = `last_activity:${address.toLowerCase()}`;
-  const value = await kv.get(key);
-  return value ? parseInt(value, 10) : 0;
+const LAST_ACTIVITY_TTL = 86400 * 90; // 90 天
+
+/**
+ * 读取所有地址的 lastActivity（合并存储）
+ * - 读取合并 key `last_activities`
+ * - 对于不在合并 key 中的订阅地址，检查细粒度 key 并合并（支持命令侧写入）
+ */
+export async function getAllLastActivities(
+  kv: KVNamespace,
+  subscribedAddresses?: string[]
+): Promise<Record<string, number>> {
+  // 1. 读取合并 key
+  const data = await kv.get('last_activities', { type: 'json' });
+  const result = (data as Record<string, number>) || {};
+
+  // 2. 对于不在合并 key 中的订阅地址，检查细粒度 key（支持命令侧新写入）
+  if (subscribedAddresses) {
+    for (const addr of subscribedAddresses) {
+      if (result[addr] === undefined) {
+        const value = await kv.get(`last_activity:${addr}`);
+        if (value) {
+          result[addr] = parseInt(value, 10);
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
+/**
+ * Cron 专用：直接保存内存快照到合并 key
+ * - 不再内部读取，直接写入传入的快照
+ * - 支持基于 validAddresses + TTL 清理孤儿数据
+ */
+export async function saveLastActivities(
+  kv: KVNamespace,
+  activities: Record<string, number>,
+  validAddresses?: Set<string>
+): Promise<void> {
+  // 清理孤儿数据：不在订阅集合中且超过 TTL 的条目
+  if (validAddresses) {
+    const now = Math.floor(Date.now() / 1000);
+    for (const addr of Object.keys(activities)) {
+      if (!validAddresses.has(addr) && now - activities[addr] > LAST_ACTIVITY_TTL) {
+        delete activities[addr];
+      }
+    }
+  }
+
+  await kv.put('last_activities', JSON.stringify(activities));
+}
+
+/**
+ * 命令侧专用：写细粒度 key（避免与 Cron 争用合并 key）
+ * - 频率低，不影响配额
+ * - 下次 Cron 会自动合并到 last_activities
+ */
 export async function setLastActivity(kv: KVNamespace, address: string, timestamp: number): Promise<void> {
   const key = `last_activity:${address.toLowerCase()}`;
-  await kv.put(key, timestamp.toString(), { expirationTtl: 86400 * 90 });  // 90 天 TTL
+  await kv.put(key, timestamp.toString(), { expirationTtl: LAST_ACTIVITY_TTL });
 }
 
+/**
+ * 命令侧专用：删除细粒度 key
+ */
 export async function deleteLastActivity(kv: KVNamespace, address: string): Promise<void> {
   const key = `last_activity:${address.toLowerCase()}`;
   await kv.delete(key);

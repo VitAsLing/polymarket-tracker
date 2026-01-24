@@ -5,7 +5,7 @@
 import { shortenAddress } from '../utils/format.js';
 import { getUserActivity } from '../api/polymarket.js';
 import { sendTelegram } from '../api/telegram.js';
-import { getSubscriptions, getLastActivity, setLastActivity, getLang, getThreshold } from '../storage/kv.js';
+import { getSubscriptions, getAllLastActivities, saveLastActivities, getLang, getThreshold } from '../storage/kv.js';
 import { formatActivityMessage } from '../messages/format.js';
 import type { Env, Subscription, CheckResult, Lang } from '../types/index.js';
 
@@ -28,13 +28,20 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
     addressMap.get(addr)!.push(sub);
   }
 
+  // 当前有效的地址集合，用于清理孤儿数据
+  const subscribedAddresses = [...addressMap.keys()];
+  const validAddresses = new Set(subscribedAddresses);
+
+  // 单次读取：合并 key + 检查命令侧写入的细粒度 key
+  const allLastActivities = await getAllLastActivities(kv, subscribedAddresses);
+
   let totalProcessed = 0;
   let totalNotified = 0;
 
   // Process each unique address once
   for (const [address, subs] of addressMap) {
     try {
-      const lastActivity = await getLastActivity(kv, address);
+      const lastActivity = allLastActivities[address] || 0;
 
       // 计算 API 查询起点：使用 lastActivity，如果为 0 则用最早的订阅时间
       let apiStart = lastActivity;
@@ -44,7 +51,7 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
           apiStart = Math.min(...validAddedAts);
         } else {
           // 老数据没有 addedAt，初始化 lastActivity 并跳过本次检查
-          await setLastActivity(kv, address, Math.floor(Date.now() / 1000));
+          allLastActivities[address] = Math.floor(Date.now() / 1000);
           continue;
         }
       }
@@ -108,12 +115,15 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       }
 
       if (maxTimestamp > lastActivity) {
-        await setLastActivity(kv, address, maxTimestamp);
+        allLastActivities[address] = maxTimestamp;
       }
     } catch (error) {
       console.error(`Error checking ${address}:`, error);
     }
   }
+
+  // 单次写入：保存所有更新 + 清理孤儿数据（基于 validAddresses + TTL）
+  await saveLastActivities(kv, allLastActivities, validAddresses);
 
   return { total: subscriptions.length, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
 }
