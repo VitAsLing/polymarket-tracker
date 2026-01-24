@@ -18,6 +18,7 @@ export const zh: Messages = {
     failedValue: '❌ 获取价值失败',
     failedRank: '❌ 获取排名失败',
     langUsage: '❌ 支持: en, zh',
+    maxSubscriptions: '❌ 已达订阅上限 (10个)，请先用 /unsub 取消部分订阅',
   },
 
   // Commands

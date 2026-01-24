@@ -13,10 +13,14 @@ import {
 import {
   getSubscriptions,
   saveSubscriptions,
+  getLastActivity,
   setLastActivity,
+  deleteLastActivity,
   resolveAddressArg,
   getLang,
 } from '../storage/kv.js';
+
+const MAX_SUBSCRIPTIONS = 10;
 import { t } from '../i18n/index.js';
 import type { Env, LeaderboardEntry, CommandResponse } from '../types/index.js';
 
@@ -50,6 +54,12 @@ export async function handleCommand(
         return `${t(lang, 'cmd.alreadySubscribed')}: ${existing.alias || shortenAddress(address)}`;
       }
 
+      // 检查订阅数量限制
+      const userSubscriptions = subscriptions.filter((s) => s.chatId === chatId);
+      if (userSubscriptions.length >= MAX_SUBSCRIPTIONS) {
+        return t(lang, 'error.maxSubscriptions');
+      }
+
       let defaultAlias = args.slice(1).join(' ');
       if (!defaultAlias) {
         try {
@@ -70,7 +80,11 @@ export async function handleCommand(
       });
       await saveSubscriptions(kv, subscriptions);
 
-      await setLastActivity(kv, address, Math.floor(Date.now() / 1000));
+      // 只在地址首次被订阅时设置 lastActivity，避免覆盖其他用户的进度
+      const existingLastActivity = await getLastActivity(kv, address);
+      if (existingLastActivity === 0) {
+        await setLastActivity(kv, address, Math.floor(Date.now() / 1000));
+      }
 
       const displayName = defaultAlias || shortenAddress(address);
       const profileUrl = `https://polymarket.com/profile/${address}`;
@@ -92,6 +106,12 @@ export async function handleCommand(
 
       const removed = subscriptions.splice(index, 1)[0];
       await saveSubscriptions(kv, subscriptions);
+
+      // 如果没有其他用户订阅该地址，清理 lastActivity
+      const othersSubscribed = subscriptions.some((s) => s.address === address);
+      if (!othersSubscribed) {
+        await deleteLastActivity(kv, address);
+      }
 
       return `${t(lang, 'cmd.unsubscribed')}: ${removed.alias || shortenAddress(address)}`;
     }

@@ -16,6 +16,7 @@ export const en = {
     failedValue: '❌ Failed to get value',
     failedRank: '❌ Failed to get rank',
     langUsage: '❌ Supported: en, zh',
+    maxSubscriptions: '❌ Max 10 subscriptions reached. Use /unsub to remove some.',
   },
 
   // Commands

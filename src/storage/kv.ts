@@ -22,7 +22,12 @@ export async function getLastActivity(kv: KVNamespace, address: string): Promise
 
 export async function setLastActivity(kv: KVNamespace, address: string, timestamp: number): Promise<void> {
   const key = `last_activity:${address.toLowerCase()}`;
-  await kv.put(key, timestamp.toString(), { expirationTtl: 86400 * 30 });
+  await kv.put(key, timestamp.toString(), { expirationTtl: 86400 * 90 });  // 90 天 TTL
+}
+
+export async function deleteLastActivity(kv: KVNamespace, address: string): Promise<void> {
+  const key = `last_activity:${address.toLowerCase()}`;
+  await kv.delete(key);
 }
 
 export async function resolveAddressArg(
