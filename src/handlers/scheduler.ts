@@ -99,8 +99,8 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
             if (sent) {
               totalNotified++;
             }
-            // Avoid Telegram rate limit
-            await new Promise((r) => setTimeout(r, 100));
+            // Avoid Telegram rate limit (with jitter)
+            await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
           }
         }
         maxTimestamp = Math.max(maxTimestamp, activity.timestamp);

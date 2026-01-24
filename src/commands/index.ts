@@ -395,16 +395,9 @@ export async function handleCommand(
       }
 
       // 解析金额
-      const input = args[0].toLowerCase();
-      let amount: number;
-
-      if (input === 'off' || input === '0') {
-        amount = 0;
-      } else {
-        amount = parseFloat(input);
-        if (isNaN(amount) || amount < 0) {
-          return t(lang, 'error.thresholdInvalid');
-        }
+      const amount = parseFloat(args[0]);
+      if (isNaN(amount) || amount < 0) {
+        return t(lang, 'error.thresholdInvalid');
       }
 
       await setThreshold(kv, chatId, amount);
