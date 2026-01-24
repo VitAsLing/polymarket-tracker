@@ -109,9 +109,9 @@ _Address format: 0x..._`,
 
   // Threshold
   threshold: {
-    current: '💰 Current threshold: $\\{amount}',
-    'current.none': '💰 No threshold set (all trades pushed)',
-    set: '✅ Threshold set to $\\{amount}',
+    current: '💰 Current threshold: {amount}',
+    none: '💰 No threshold set (all trades pushed)',
+    set: '✅ Threshold set to {amount}',
     disabled: '✅ Threshold disabled (all trades pushed)',
   },
 };

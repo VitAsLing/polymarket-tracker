@@ -26,9 +26,9 @@ import type { Env, Subscription, LeaderboardEntry, CommandResponse } from '../ty
 
 // 生成订阅选择的 inline keyboard
 function buildSubscriptionKeyboard(subscriptions: Subscription[], action: string) {
-  // 每行 2 个按钮
+  // 每行 2 个按钮，加 emoji
   const buttons = subscriptions.map((sub) => ({
-    text: sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`,
+    text: `👤 ${sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`}`,
     callback_data: `${action}:${sub.address}`,
   }));
   const rows = [];
@@ -393,7 +393,7 @@ export async function handleCommand(
       if (!args[0]) {
         // 显示当前阈值
         if (currentThreshold <= 0) {
-          return t(lang, 'threshold.current.none');
+          return t(lang, 'threshold.none');
         }
         return t(lang, 'threshold.current').replace('{amount}', currentThreshold.toString());
       }

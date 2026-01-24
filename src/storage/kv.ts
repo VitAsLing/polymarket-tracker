@@ -56,9 +56,11 @@ export async function resolveAddressArg(
   }
 
   if (arg.toLowerCase().startsWith('0x')) {
+    const addr = arg.toLowerCase();
+    const sub = userSubscriptions.find((s) => s.address === addr);
     return {
-      address: arg.toLowerCase(),
-      displayName: shortenAddress(arg),
+      address: addr,
+      displayName: sub?.alias || shortenAddress(arg),
     };
   }
 
