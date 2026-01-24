@@ -5,7 +5,7 @@
 import { shortenAddress } from '../utils/format.js';
 import { getUserActivity } from '../api/polymarket.js';
 import { sendTelegram } from '../api/telegram.js';
-import { getSubscriptions, getLastActivity, setLastActivity, getLang } from '../storage/kv.js';
+import { getSubscriptions, getLastActivity, setLastActivity, getLang, getThreshold } from '../storage/kv.js';
 import { formatActivityMessage } from '../messages/format.js';
 import type { Env, Subscription, CheckResult, Lang } from '../types/index.js';
 
@@ -58,15 +58,16 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
-      // 预先计算每个订阅者的 displayName 和语言设置，避免重复计算
+      // 预先计算每个订阅者的 displayName、语言设置和阈值，避免重复计算
       const shortAddr = shortenAddress(address);
-      const subInfoMap = new Map<number, { displayName: string; lang: Lang; addedAtSec: number }>();
+      const subInfoMap = new Map<number, { displayName: string; lang: Lang; addedAtSec: number; threshold: number }>();
       for (const sub of subs) {
         if (!subInfoMap.has(sub.chatId)) {
           subInfoMap.set(sub.chatId, {
             displayName: sub.alias || shortAddr,
             lang: await getLang(kv, sub.chatId),
             addedAtSec: sub.addedAt ? Math.floor(sub.addedAt / 1000) : 0,
+            threshold: await getThreshold(kv, sub.chatId),
           });
         }
       }
@@ -76,8 +77,18 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       for (const activity of newActivities) {
         // Send to all users who subscribed to this address (deduplicated by chatId)
         for (const [chatId, subInfo] of subInfoMap) {
+          // 只推送 BUY/SELL，跳过 REDEEM
+          if (activity.type !== 'TRADE') {
+            continue;
+          }
+
           // 只推送订阅之后的活动（addedAt 是毫秒，timestamp 是秒）
           if (activity.timestamp <= subInfo.addedAtSec) {
+            continue;
+          }
+
+          // 检查金额阈值，低于阈值则跳过推送
+          if (subInfo.threshold > 0 && activity.usdcSize < subInfo.threshold) {
             continue;
           }
 

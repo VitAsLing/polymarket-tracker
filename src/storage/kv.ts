@@ -84,3 +84,16 @@ export async function getLang(kv: KVNamespace, chatId: number): Promise<Lang> {
 export async function setLang(kv: KVNamespace, chatId: number, lang: Lang): Promise<void> {
   await kv.put(`lang:${chatId}`, lang);
 }
+
+export async function getThreshold(kv: KVNamespace, chatId: number): Promise<number> {
+  const value = await kv.get(`threshold:${chatId}`);
+  return value ? parseFloat(value) : 0;
+}
+
+export async function setThreshold(kv: KVNamespace, chatId: number, amount: number): Promise<void> {
+  if (amount <= 0) {
+    await kv.delete(`threshold:${chatId}`);
+  } else {
+    await kv.put(`threshold:${chatId}`, amount.toString());
+  }
+}

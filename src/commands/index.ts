@@ -18,9 +18,25 @@ import {
   deleteLastActivity,
   resolveAddressArg,
   getLang,
+  getThreshold,
+  setThreshold,
 } from '../storage/kv.js';
 import { t } from '../i18n/index.js';
-import type { Env, LeaderboardEntry, CommandResponse } from '../types/index.js';
+import type { Env, Subscription, LeaderboardEntry, CommandResponse } from '../types/index.js';
+
+// 生成订阅选择的 inline keyboard
+function buildSubscriptionKeyboard(subscriptions: Subscription[], action: string) {
+  // 每行 2 个按钮
+  const buttons = subscriptions.map((sub) => ({
+    text: sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`,
+    callback_data: `${action}:${sub.address}`,
+  }));
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 2) {
+    rows.push(buttons.slice(i, i + 2));
+  }
+  return { inline_keyboard: rows };
+}
 
 const MAX_SUBSCRIPTIONS = 10;
 
@@ -38,8 +54,7 @@ export async function handleCommand(
     case '/help':
       return t(lang, 'cmd.help');
 
-    case '/sub':
-    case '/subscribe': {
+    case '/sub': {
       if (!args[0]) {
         return t(lang, 'error.provideAddress');
       }
@@ -91,10 +106,17 @@ export async function handleCommand(
       return `${t(lang, 'cmd.subscribed')}: [${escapeMarkdown(displayName)}](${profileUrl})\nAddress: \`${address}\``;
     }
 
-    case '/unsub':
-    case '/unsubscribe': {
+    case '/unsub': {
       if (!args[0]) {
-        return t(lang, 'error.provideAddressUnsubscribe');
+        const allSubs = await getSubscriptions(kv);
+        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        if (userSubs.length === 0) {
+          return t(lang, 'cmd.noSubscriptions');
+        }
+        return {
+          text: t(lang, 'select.unsubscribe'),
+          reply_markup: buildSubscriptionKeyboard(userSubs, 'unsub'),
+        };
       }
       const address = args[0].toLowerCase();
       const subscriptions = await getSubscriptions(kv);
@@ -151,6 +173,20 @@ export async function handleCommand(
     }
 
     case '/pos': {
+      // 如果没有参数，检查是否需要显示选择列表
+      if (!args[0]) {
+        const allSubs = await getSubscriptions(kv);
+        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        if (userSubs.length === 0) {
+          return t(lang, 'cmd.noSubscriptions');
+        }
+        if (userSubs.length > 1) {
+          return {
+            text: t(lang, 'select.address'),
+            reply_markup: buildSubscriptionKeyboard(userSubs, 'pos'),
+          };
+        }
+      }
       const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return `${t(lang, 'error.provideAddressOrAlias')}: /pos 0x...`;
@@ -204,6 +240,19 @@ export async function handleCommand(
     }
 
     case '/pnl': {
+      if (!args[0]) {
+        const allSubs = await getSubscriptions(kv);
+        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        if (userSubs.length === 0) {
+          return t(lang, 'cmd.noSubscriptions');
+        }
+        if (userSubs.length > 1) {
+          return {
+            text: t(lang, 'select.address'),
+            reply_markup: buildSubscriptionKeyboard(userSubs, 'pnl'),
+          };
+        }
+      }
       const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return `${t(lang, 'error.provideAddressOrAlias')}: /pnl 0x...`;
@@ -241,6 +290,19 @@ export async function handleCommand(
     }
 
     case '/value': {
+      if (!args[0]) {
+        const allSubs = await getSubscriptions(kv);
+        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        if (userSubs.length === 0) {
+          return t(lang, 'cmd.noSubscriptions');
+        }
+        if (userSubs.length > 1) {
+          return {
+            text: t(lang, 'select.address'),
+            reply_markup: buildSubscriptionKeyboard(userSubs, 'value'),
+          };
+        }
+      }
       const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return `${t(lang, 'error.provideAddressOrAlias')}: /value 0x...`;
@@ -258,6 +320,19 @@ export async function handleCommand(
     }
 
     case '/rank': {
+      if (!args[0]) {
+        const allSubs = await getSubscriptions(kv);
+        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        if (userSubs.length === 0) {
+          return t(lang, 'cmd.noSubscriptions');
+        }
+        if (userSubs.length > 1) {
+          return {
+            text: t(lang, 'select.address'),
+            reply_markup: buildSubscriptionKeyboard(userSubs, 'rank'),
+          };
+        }
+      }
       const { address, displayName } = await resolveAddressArg(args[0], kv, chatId);
       if (!address) {
         return `${t(lang, 'error.provideAddressOrAlias')}: /rank 0x...`;
@@ -310,6 +385,38 @@ export async function handleCommand(
           ]],
         },
       };
+    }
+
+    case '/th': {
+      const currentThreshold = await getThreshold(kv, chatId);
+
+      if (!args[0]) {
+        // 显示当前阈值
+        if (currentThreshold <= 0) {
+          return t(lang, 'threshold.current.none');
+        }
+        return t(lang, 'threshold.current').replace('{amount}', currentThreshold.toString());
+      }
+
+      // 解析金额
+      const input = args[0].toLowerCase();
+      let amount: number;
+
+      if (input === 'off' || input === '0') {
+        amount = 0;
+      } else {
+        amount = parseFloat(input);
+        if (isNaN(amount) || amount < 0) {
+          return t(lang, 'error.thresholdInvalid');
+        }
+      }
+
+      await setThreshold(kv, chatId, amount);
+
+      if (amount <= 0) {
+        return t(lang, 'threshold.disabled');
+      }
+      return t(lang, 'threshold.set').replace('{amount}', amount.toString());
     }
 
     default:

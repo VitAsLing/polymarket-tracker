@@ -40,8 +40,8 @@ interface ActivityOptions {
 export async function getUserActivity(address: string, options: ActivityOptions = {}): Promise<Activity[]> {
   return polymarketRequest<Activity[]>('/activity', {
     user: address,
-    type: 'TRADE,REDEEM',
-    limit: options.limit || 20,
+    type: 'TRADE',
+    limit: options.limit || 50,
     sortBy: 'TIMESTAMP',
     sortDirection: 'DESC',
     ...options,

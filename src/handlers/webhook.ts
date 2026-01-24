@@ -90,5 +90,18 @@ async function handleCallbackQuery(
     }
   }
 
+  // Handle commands with address selection (pos, pnl, value, rank, unsub)
+  const queryCommands = ['pos', 'pnl', 'value', 'rank', 'unsub'];
+  const [action, address] = data.split(':');
+  if (queryCommands.includes(action) && address) {
+    await answerCallbackQuery(env.TG_BOT_TOKEN, id);
+    const response = await handleCommand(`/${action}`, [address], chatId, env);
+    if (response) {
+      const text = typeof response === 'string' ? response : response.text;
+      await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, text);
+    }
+    return;
+  }
+
   await answerCallbackQuery(env.TG_BOT_TOKEN, id);
 }

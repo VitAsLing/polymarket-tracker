@@ -8,7 +8,6 @@ export const zh: Messages = {
   // Errors
   error: {
     provideAddress: '❌ 请提供地址: /sub 0x... [别名]',
-    provideAddressUnsubscribe: '❌ 请提供地址: /unsub 0x...',
     provideAddressOrAlias: '❌ 请提供地址或别名',
     invalidAddress: '❌ 地址格式无效',
     notFound: '❌ 未找到订阅',
@@ -19,6 +18,7 @@ export const zh: Messages = {
     failedRank: '❌ 获取排名失败',
     langUsage: '❌ 支持: en, zh',
     maxSubscriptions: '❌ 已达订阅上限 (10个)，请先用 /unsub 取消部分订阅',
+    thresholdInvalid: '❌ 金额无效。用法: /th 100 或 /th off',
   },
 
   // Commands
@@ -38,6 +38,7 @@ export const zh: Messages = {
 /rank [地址/别名] - 排行榜
 
 *设置:*
+/th [金额] - 推送最小金额
 /lang - 切换语言
 
 _地址格式: 0x..._`,
@@ -100,5 +101,19 @@ _地址格式: 0x..._`,
     switched: '✅ 语言已切换为: {lang}',
     english: 'English',
     chinese: '中文',
+  },
+
+  // Select
+  select: {
+    address: '📋 请选择地址:',
+    unsubscribe: '📋 选择要取消订阅的:',
+  },
+
+  // Threshold
+  threshold: {
+    current: '💰 当前阈值: $\\{amount}',
+    'current.none': '💰 未设置阈值 (推送所有交易)',
+    set: '✅ 阈值已设为 $\\{amount}',
+    disabled: '✅ 已关闭阈值过滤 (推送所有交易)',
   },
 };
