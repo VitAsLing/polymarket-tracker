@@ -13,9 +13,6 @@ import {
 import {
   getSubscriptions,
   saveSubscriptions,
-  getAllLastActivities,
-  setLastActivity,
-  deleteLastActivity,
   resolveAddressArg,
   getLang,
   getThreshold,
@@ -91,14 +88,6 @@ export async function handleCommand(
       });
       await saveSubscriptions(kv, subscriptions);
 
-      // 写细粒度 key，下次 Cron 会自动合并到 last_activities
-      // 只在地址首次被订阅时设置，避免覆盖其他用户的进度
-      // 传入 [address] 确保同时检查合并 key 和细粒度 key（兼容旧数据）
-      const allLastActivities = await getAllLastActivities(kv, [address]);
-      if (!allLastActivities[address]) {
-        await setLastActivity(kv, address, Math.floor(Date.now() / 1000));
-      }
-
       const displayName = defaultAlias || shortenAddress(address);
       const profileUrl = `https://polymarket.com/profile/${address}`;
       return `${t(lang, 'cmd.subscribed')}: [${escapeMarkdown(displayName)}](${profileUrl})\nAddress: \`${address}\``;
@@ -126,13 +115,6 @@ export async function handleCommand(
 
       const removed = subscriptions.splice(index, 1)[0];
       await saveSubscriptions(kv, subscriptions);
-
-      // 如果没有其他用户订阅该地址，删除细粒度 key
-      // 合并 key 中的数据会在 Cron 的 TTL 清理中自动处理
-      const othersSubscribed = subscriptions.some((s) => s.address === address);
-      if (!othersSubscribed) {
-        await deleteLastActivity(kv, address);
-      }
 
       return `${t(lang, 'cmd.unsubscribed')}: ${removed.alias || shortenAddress(address)}`;
     }

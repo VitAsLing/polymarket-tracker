@@ -5,7 +5,7 @@
 import { shortenAddress } from '../utils/format.js';
 import { getUserActivity } from '../api/polymarket.js';
 import { sendTelegram } from '../api/telegram.js';
-import { getSubscriptions, getAllLastActivities, saveLastActivities, getLang, getThreshold } from '../storage/kv.js';
+import { getSubscriptions, getAllLastActivities, saveLastActivities, getAllUserConfigs, saveAllUserConfigs, type UserConfig } from '../storage/kv.js';
 import { formatActivityMessage } from '../messages/format.js';
 import type { Env, Subscription, CheckResult, Lang } from '../types/index.js';
 
@@ -29,11 +29,17 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
   }
 
   // 当前有效的地址集合，用于清理孤儿数据
-  const subscribedAddresses = [...addressMap.keys()];
-  const validAddresses = new Set(subscribedAddresses);
+  const validAddresses = new Set(addressMap.keys());
 
-  // 单次读取：合并 key + 检查命令侧写入的细粒度 key
-  const allLastActivities = await getAllLastActivities(kv, subscribedAddresses);
+  // 收集所有唯一的 chatId
+  const allChatIds = [...new Set(subscriptions.map(s => s.chatId))];
+
+  // 单次读取所有合并 key
+  const allLastActivities = await getAllLastActivities(kv);
+  const allUserConfigs = await getAllUserConfigs(kv, allChatIds);
+
+  // 默认用户配置
+  const defaultConfig: UserConfig = { lang: 'en', threshold: 10 };
 
   let totalProcessed = 0;
   let totalNotified = 0;
@@ -65,16 +71,17 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
-      // 预先计算每个订阅者的 displayName、语言设置和阈值，避免重复计算
+      // 预先计算每个订阅者的 displayName、语言设置和阈值（从内存读取）
       const shortAddr = shortenAddress(address);
       const subInfoMap = new Map<number, { displayName: string; lang: Lang; addedAtSec: number; threshold: number }>();
       for (const sub of subs) {
         if (!subInfoMap.has(sub.chatId)) {
+          const userConfig = allUserConfigs[String(sub.chatId)] || defaultConfig;
           subInfoMap.set(sub.chatId, {
             displayName: sub.alias || shortAddr,
-            lang: await getLang(kv, sub.chatId),
+            lang: userConfig.lang,
             addedAtSec: sub.addedAt ? Math.floor(sub.addedAt / 1000) : 0,
-            threshold: await getThreshold(kv, sub.chatId),
+            threshold: userConfig.threshold,
           });
         }
       }
@@ -124,6 +131,9 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
 
   // 单次写入：保存所有更新 + 清理孤儿数据（基于 validAddresses + TTL）
   await saveLastActivities(kv, allLastActivities, validAddresses);
+
+  // 保存用户配置到合并 key（迁移旧数据）
+  await saveAllUserConfigs(kv, allUserConfigs);
 
   return { total: subscriptions.length, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
 }

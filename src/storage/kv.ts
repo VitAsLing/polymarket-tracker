@@ -26,35 +26,14 @@ const LAST_ACTIVITY_TTL = 86400 * 90; // 90 天
 
 /**
  * 读取所有地址的 lastActivity（合并存储）
- * - 读取合并 key `last_activities`
- * - 对于不在合并 key 中的订阅地址，检查细粒度 key 并合并（支持命令侧写入）
  */
-export async function getAllLastActivities(
-  kv: KVNamespace,
-  subscribedAddresses?: string[]
-): Promise<Record<string, number>> {
-  // 1. 读取合并 key
+export async function getAllLastActivities(kv: KVNamespace): Promise<Record<string, number>> {
   const data = await kv.get('last_activities', { type: 'json' });
-  const result = (data as Record<string, number>) || {};
-
-  // 2. 对于不在合并 key 中的订阅地址，检查细粒度 key（支持命令侧新写入）
-  if (subscribedAddresses) {
-    for (const addr of subscribedAddresses) {
-      if (result[addr] === undefined) {
-        const value = await kv.get(`last_activity:${addr}`);
-        if (value) {
-          result[addr] = parseInt(value, 10);
-        }
-      }
-    }
-  }
-
-  return result;
+  return (data as Record<string, number>) || {};
 }
 
 /**
- * Cron 专用：直接保存内存快照到合并 key
- * - 不再内部读取，直接写入传入的快照
+ * 保存 lastActivity 到合并 key
  * - 支持基于 validAddresses + TTL 清理孤儿数据
  */
 export async function saveLastActivities(
@@ -73,24 +52,6 @@ export async function saveLastActivities(
   }
 
   await kv.put('last_activities', JSON.stringify(activities));
-}
-
-/**
- * 命令侧专用：写细粒度 key（避免与 Cron 争用合并 key）
- * - 频率低，不影响配额
- * - 下次 Cron 会自动合并到 last_activities
- */
-export async function setLastActivity(kv: KVNamespace, address: string, timestamp: number): Promise<void> {
-  const key = `last_activity:${address.toLowerCase()}`;
-  await kv.put(key, timestamp.toString(), { expirationTtl: LAST_ACTIVITY_TTL });
-}
-
-/**
- * 命令侧专用：删除细粒度 key
- */
-export async function deleteLastActivity(kv: KVNamespace, address: string): Promise<void> {
-  const key = `last_activity:${address.toLowerCase()}`;
-  await kv.delete(key);
 }
 
 export async function resolveAddressArg(
@@ -135,20 +96,118 @@ export async function resolveAddressArg(
   return { address: null, displayName: null };
 }
 
+export interface UserConfig {
+  lang: Lang;
+  threshold: number;
+}
+
+/**
+ * 读取所有用户配置（合并存储）
+ * 兼容旧格式：对于不在合并 key 中的用户，检查独立 key
+ */
+export async function getAllUserConfigs(
+  kv: KVNamespace,
+  chatIds?: number[]
+): Promise<Record<string, UserConfig>> {
+  // 1. 读取合并 key
+  const data = await kv.get('user_configs', { type: 'json' });
+  const result = (data as Record<string, UserConfig>) || {};
+
+  // 2. 对于不在合并 key 中的用户，检查独立 key（兼容旧数据）
+  if (chatIds) {
+    for (const chatId of chatIds) {
+      const key = String(chatId);
+      if (result[key] === undefined) {
+        const lang = await kv.get(`lang:${chatId}`);
+        const threshold = await kv.get(`threshold:${chatId}`);
+        if (lang || threshold) {
+          result[key] = {
+            lang: (lang as Lang) || 'en',
+            threshold: threshold ? parseFloat(threshold) : DEFAULT_THRESHOLD,
+          };
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 保存单个用户配置到合并 key
+ */
+export async function saveUserConfig(
+  kv: KVNamespace,
+  chatId: number,
+  config: Partial<UserConfig>
+): Promise<void> {
+  const data = await kv.get('user_configs', { type: 'json' });
+  const allConfigs = (data as Record<string, UserConfig>) || {};
+  const key = String(chatId);
+
+  // 合并配置
+  allConfigs[key] = {
+    lang: config.lang ?? allConfigs[key]?.lang ?? 'en',
+    threshold: config.threshold ?? allConfigs[key]?.threshold ?? DEFAULT_THRESHOLD,
+  };
+
+  await kv.put('user_configs', JSON.stringify(allConfigs));
+}
+
+/**
+ * 保存所有用户配置到合并 key（用于 Cron 迁移）
+ */
+export async function saveAllUserConfigs(
+  kv: KVNamespace,
+  configs: Record<string, UserConfig>
+): Promise<void> {
+  await kv.put('user_configs', JSON.stringify(configs));
+}
+
+/**
+ * 获取用户语言（从合并 key 或独立 key）
+ */
 export async function getLang(kv: KVNamespace, chatId: number): Promise<Lang> {
+  // 优先从合并 key 读取
+  const data = await kv.get('user_configs', { type: 'json' });
+  const allConfigs = (data as Record<string, UserConfig>) || {};
+  const config = allConfigs[String(chatId)];
+  if (config?.lang) {
+    return config.lang;
+  }
+
+  // 兼容旧格式
   const lang = await kv.get(`lang:${chatId}`);
   return (lang as Lang) || 'en';
 }
 
+/**
+ * 设置用户语言
+ */
 export async function setLang(kv: KVNamespace, chatId: number, lang: Lang): Promise<void> {
-  await kv.put(`lang:${chatId}`, lang);
+  await saveUserConfig(kv, chatId, { lang });
 }
 
+/**
+ * 获取用户阈值（从合并 key 或独立 key）
+ */
 export async function getThreshold(kv: KVNamespace, chatId: number): Promise<number> {
+  // 优先从合并 key 读取
+  const data = await kv.get('user_configs', { type: 'json' });
+  const allConfigs = (data as Record<string, UserConfig>) || {};
+  const config = allConfigs[String(chatId)];
+  if (config?.threshold !== undefined) {
+    return config.threshold;
+  }
+
+  // 兼容旧格式
   const value = await kv.get(`threshold:${chatId}`);
   return value ? parseFloat(value) : DEFAULT_THRESHOLD;
 }
 
+/**
+ * 设置用户阈值
+ */
 export async function setThreshold(kv: KVNamespace, chatId: number, amount: number): Promise<void> {
-  await kv.put(`threshold:${chatId}`, amount.toString());
+  await saveUserConfig(kv, chatId, { threshold: amount });
 }
