@@ -26,15 +26,11 @@ import type { Env, Subscription, LeaderboardEntry, CommandResponse } from '../ty
 
 // 生成订阅选择的 inline keyboard
 function buildSubscriptionKeyboard(subscriptions: Subscription[], action: string) {
-  // 每行 2 个按钮，加 emoji
-  const buttons = subscriptions.map((sub) => ({
-    text: `👤 ${sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`}`,
+  // 每行 1 个按钮
+  const rows = subscriptions.map((sub) => [{
+    text: sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`,
     callback_data: `${action}:${sub.address}`,
-  }));
-  const rows = [];
-  for (let i = 0; i < buttons.length; i += 2) {
-    rows.push(buttons.slice(i, i + 2));
-  }
+  }]);
   return { inline_keyboard: rows };
 }
 
