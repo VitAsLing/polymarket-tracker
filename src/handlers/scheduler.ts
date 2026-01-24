@@ -5,38 +5,61 @@
 import { shortenAddress } from '../utils/format.js';
 import { getUserActivity } from '../api/polymarket.js';
 import { sendTelegram } from '../api/telegram.js';
-import { getSubscriptions, getAllLastActivities, saveLastActivities, getAllUserConfigs, saveAllUserConfigs, type UserConfig } from '../storage/kv.js';
+import {
+  getAllUserSubscriptions,
+  getAllLastActivities,
+  saveLastActivities,
+  getAllUserConfigs,
+  migrateOldData,
+  type SubRecord,
+  type UserConfig,
+} from '../storage/kv.js';
 import { formatActivityMessage } from '../messages/format.js';
-import type { Env, Subscription, CheckResult, Lang } from '../types/index.js';
+import type { Env, CheckResult, Lang } from '../types/index.js';
+
+// 带 chatId 的订阅信息（用于按地址分组后保留用户信息）
+interface SubWithChat extends SubRecord {
+  chatId: number;
+}
 
 export async function checkSubscriptions(env: Env): Promise<CheckResult> {
   const kv = env.POLYMARKET_KV;
   const botToken = env.TG_BOT_TOKEN;
-  const subscriptions = await getSubscriptions(kv);
 
-  if (subscriptions.length === 0) {
+  // 先执行数据迁移（如果有旧数据）
+  await migrateOldData(kv);
+
+  // 读取所有用户订阅（Map<chatId, SubRecord[]>）
+  const userSubsMap = await getAllUserSubscriptions(kv);
+
+  if (userSubsMap.size === 0) {
     return { total: 0, processed: 0, notified: 0 };
   }
 
-  // Group subscriptions by address (to avoid duplicate API calls)
-  const addressMap = new Map<string, Subscription[]>();
-  for (const sub of subscriptions) {
-    const addr = sub.address.toLowerCase();
-    if (!addressMap.has(addr)) {
-      addressMap.set(addr, []);
+  // 统计总订阅数
+  let totalSubs = 0;
+  for (const subs of userSubsMap.values()) {
+    totalSubs += subs.length;
+  }
+
+  // 按地址分组（用于避免重复 API 调用）
+  const addressMap = new Map<string, SubWithChat[]>();
+  for (const [chatId, subs] of userSubsMap) {
+    for (const sub of subs) {
+      const addr = sub.address.toLowerCase();
+      if (!addressMap.has(addr)) {
+        addressMap.set(addr, []);
+      }
+      addressMap.get(addr)!.push({ ...sub, chatId });
     }
-    addressMap.get(addr)!.push(sub);
   }
 
   // 当前有效的地址集合，用于清理孤儿数据
   const validAddresses = new Set(addressMap.keys());
 
-  // 收集所有唯一的 chatId
-  const allChatIds = [...new Set(subscriptions.map(s => s.chatId))];
-
-  // 单次读取所有合并 key
+  // 读取所有数据
   const allLastActivities = await getAllLastActivities(kv);
-  const allUserConfigs = await getAllUserConfigs(kv, allChatIds);
+  const allUserConfigs = await getAllUserConfigs(kv);
 
   // 默认用户配置
   const defaultConfig: UserConfig = { lang: 'en', threshold: 10 };
@@ -71,12 +94,12 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
       // Sort by time (oldest first)
       newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
-      // 预先计算每个订阅者的 displayName、语言设置和阈值（从内存读取）
+      // 预先计算每个订阅者的 displayName、语言设置和阈值
       const shortAddr = shortenAddress(address);
       const subInfoMap = new Map<number, { displayName: string; lang: Lang; addedAtSec: number; threshold: number }>();
       for (const sub of subs) {
         if (!subInfoMap.has(sub.chatId)) {
-          const userConfig = allUserConfigs[String(sub.chatId)] || defaultConfig;
+          const userConfig = allUserConfigs.get(sub.chatId) || defaultConfig;
           subInfoMap.set(sub.chatId, {
             displayName: sub.alias || shortAddr,
             lang: userConfig.lang,
@@ -129,11 +152,8 @@ export async function checkSubscriptions(env: Env): Promise<CheckResult> {
     }
   }
 
-  // 单次写入：保存所有更新 + 清理孤儿数据（基于 validAddresses + TTL）
+  // 保存更新 + 清理孤儿数据
   await saveLastActivities(kv, allLastActivities, validAddresses);
 
-  // 保存用户配置到合并 key（迁移旧数据）
-  await saveAllUserConfigs(kv, allUserConfigs);
-
-  return { total: subscriptions.length, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
+  return { total: totalSubs, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
 }

@@ -2,7 +2,7 @@
  * HTTP request router
  */
 
-import { getSubscriptions } from '../storage/kv.js';
+import { getAllUserSubscriptions } from '../storage/kv.js';
 import { handleWebhook } from './webhook.js';
 import { checkSubscriptions } from './scheduler.js';
 import type { Env } from '../types/index.js';
@@ -27,16 +27,20 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     return Response.json({ status: 'ok', timestamp: Date.now() });
   }
 
-  // View subscriptions
+  // View subscriptions (convert Map to object for JSON)
   if (path === '/subscriptions') {
-    const subscriptions = await getSubscriptions(env.POLYMARKET_KV);
-    return Response.json(subscriptions);
+    const subsMap = await getAllUserSubscriptions(env.POLYMARKET_KV);
+    const result: Record<string, unknown[]> = {};
+    for (const [chatId, subs] of subsMap) {
+      result[String(chatId)] = subs;
+    }
+    return Response.json(result);
   }
 
   // Default response
   return Response.json({
     name: 'Polymarket Tracker Bot',
-    version: '2.2.0',
+    version: '2.3.0',
     endpoints: {
       'POST /webhook': 'Telegram webhook',
       'GET /check': 'Manually trigger check',

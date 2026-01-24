@@ -11,18 +11,19 @@ import {
   getLeaderboardRank,
 } from '../api/polymarket.js';
 import {
-  getSubscriptions,
-  saveSubscriptions,
+  getUserSubscriptions,
+  saveUserSubscriptions,
   resolveAddressArg,
   getLang,
   getThreshold,
   setThreshold,
+  type SubRecord,
 } from '../storage/kv.js';
 import { t } from '../i18n/index.js';
-import type { Env, Subscription, LeaderboardEntry, CommandResponse } from '../types/index.js';
+import type { Env, LeaderboardEntry, CommandResponse } from '../types/index.js';
 
 // 生成订阅选择的 inline keyboard
-function buildSubscriptionKeyboard(subscriptions: Subscription[], action: string) {
+function buildSubscriptionKeyboard(subscriptions: SubRecord[], action: string) {
   // 每行 1 个按钮
   const rows = subscriptions.map((sub) => [{
     text: sub.alias || `${sub.address.slice(0, 6)}...${sub.address.slice(-4)}`,
@@ -56,15 +57,14 @@ export async function handleCommand(
         return t(lang, 'error.invalidAddress');
       }
 
-      const subscriptions = await getSubscriptions(kv);
-      const existing = subscriptions.find((s) => s.address === address && s.chatId === chatId);
+      const userSubs = await getUserSubscriptions(kv, chatId);
+      const existing = userSubs.find((s) => s.address === address);
       if (existing) {
         return `${t(lang, 'cmd.alreadySubscribed')}: ${existing.alias || shortenAddress(address)}`;
       }
 
       // 检查订阅数量限制
-      const userSubscriptions = subscriptions.filter((s) => s.chatId === chatId);
-      if (userSubscriptions.length >= MAX_SUBSCRIPTIONS) {
+      if (userSubs.length >= MAX_SUBSCRIPTIONS) {
         return t(lang, 'error.maxSubscriptions');
       }
 
@@ -80,13 +80,12 @@ export async function handleCommand(
         }
       }
 
-      subscriptions.push({
+      userSubs.push({
         address,
         alias: defaultAlias || '',
-        chatId,
         addedAt: Date.now(),
       });
-      await saveSubscriptions(kv, subscriptions);
+      await saveUserSubscriptions(kv, chatId, userSubs);
 
       const displayName = defaultAlias || shortenAddress(address);
       const profileUrl = `https://polymarket.com/profile/${address}`;
@@ -94,9 +93,9 @@ export async function handleCommand(
     }
 
     case '/unsub': {
+      const userSubs = await getUserSubscriptions(kv, chatId);
+
       if (!args[0]) {
-        const allSubs = await getSubscriptions(kv);
-        const userSubs = allSubs.filter((s) => s.chatId === chatId);
         if (userSubs.length === 0) {
           return t(lang, 'cmd.noSubscriptions');
         }
@@ -105,29 +104,28 @@ export async function handleCommand(
           reply_markup: buildSubscriptionKeyboard(userSubs, 'unsub'),
         };
       }
+
       const address = args[0].toLowerCase();
-      const subscriptions = await getSubscriptions(kv);
-      const index = subscriptions.findIndex((s) => s.address === address && s.chatId === chatId);
+      const index = userSubs.findIndex((s) => s.address === address);
 
       if (index === -1) {
         return t(lang, 'error.notFound');
       }
 
-      const removed = subscriptions.splice(index, 1)[0];
-      await saveSubscriptions(kv, subscriptions);
+      const removed = userSubs.splice(index, 1)[0];
+      await saveUserSubscriptions(kv, chatId, userSubs);
 
       return `${t(lang, 'cmd.unsubscribed')}: ${removed.alias || shortenAddress(address)}`;
     }
 
     case '/list': {
-      const allSubscriptions = await getSubscriptions(kv);
-      const subscriptions = allSubscriptions.filter((s) => s.chatId === chatId);
-      if (subscriptions.length === 0) {
+      const userSubs = await getUserSubscriptions(kv, chatId);
+      if (userSubs.length === 0) {
         return t(lang, 'cmd.noSubscriptions');
       }
 
       let msg = `${t(lang, 'cmd.subscriptionsList')}\n\n`;
-      subscriptions.forEach((sub, i) => {
+      userSubs.forEach((sub, i) => {
         const name = sub.alias || shortenAddress(sub.address);
         const profileUrl = `https://polymarket.com/profile/${sub.address}`;
         msg += `${i + 1}. [${escapeMarkdown(name)}](${profileUrl})\n   \`${sub.address}\`\n\n`;
@@ -142,22 +140,21 @@ export async function handleCommand(
       const address = args[0].toLowerCase();
       const newAlias = args.slice(1).join(' ');
 
-      const subscriptions = await getSubscriptions(kv);
-      const sub = subscriptions.find((s) => s.address === address && s.chatId === chatId);
+      const userSubs = await getUserSubscriptions(kv, chatId);
+      const sub = userSubs.find((s) => s.address === address);
       if (!sub) {
         return t(lang, 'error.notFound');
       }
 
       sub.alias = newAlias;
-      await saveSubscriptions(kv, subscriptions);
+      await saveUserSubscriptions(kv, chatId, userSubs);
       return `${t(lang, 'cmd.aliasUpdated')}: *${escapeMarkdown(newAlias)}*`;
     }
 
     case '/pos': {
       // 如果没有参数，检查是否需要显示选择列表
       if (!args[0]) {
-        const allSubs = await getSubscriptions(kv);
-        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        const userSubs = await getUserSubscriptions(kv, chatId);
         if (userSubs.length === 0) {
           return t(lang, 'cmd.noSubscriptions');
         }
@@ -222,8 +219,7 @@ export async function handleCommand(
 
     case '/pnl': {
       if (!args[0]) {
-        const allSubs = await getSubscriptions(kv);
-        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        const userSubs = await getUserSubscriptions(kv, chatId);
         if (userSubs.length === 0) {
           return t(lang, 'cmd.noSubscriptions');
         }
@@ -272,8 +268,7 @@ export async function handleCommand(
 
     case '/value': {
       if (!args[0]) {
-        const allSubs = await getSubscriptions(kv);
-        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        const userSubs = await getUserSubscriptions(kv, chatId);
         if (userSubs.length === 0) {
           return t(lang, 'cmd.noSubscriptions');
         }
@@ -302,8 +297,7 @@ export async function handleCommand(
 
     case '/rank': {
       if (!args[0]) {
-        const allSubs = await getSubscriptions(kv);
-        const userSubs = allSubs.filter((s) => s.chatId === chatId);
+        const userSubs = await getUserSubscriptions(kv, chatId);
         if (userSubs.length === 0) {
           return t(lang, 'cmd.noSubscriptions');
         }
