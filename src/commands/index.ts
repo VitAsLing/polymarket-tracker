@@ -100,8 +100,12 @@ export async function getPositionsPage(
     let statusEmoji = '';
     if (pos.curPrice <= 0.01) {
       statusEmoji = '🟥 ';
-    } else if (pos.redeemable) {
+    } else if (pos.curPrice >= 0.99 || pos.redeemable) {
       statusEmoji = '🟩 ';
+    } else if (pos.curPrice > pos.avgPrice) {
+      statusEmoji = '🔼 ';
+    } else if (pos.curPrice < pos.avgPrice) {
+      statusEmoji = '🔽 ';
     }
 
     const marketUrl = pos.eventSlug || pos.slug
