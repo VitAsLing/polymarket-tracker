@@ -16,6 +16,7 @@ export interface Env {
   POLYMARKET_KV: KVNamespace;
   TG_BOT_TOKEN: string;
   WEBHOOK_SECRET?: string; // Optional: Telegram webhook secret token
+  SCHEDULER_DO: DurableObjectNamespace; // Durable Object for scheduling
 }
 
 // Subscription data structure

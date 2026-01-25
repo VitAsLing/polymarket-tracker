@@ -17,6 +17,7 @@ import {
   getLang,
   getThreshold,
   setThreshold,
+  notifyDO,
   type SubRecord,
 } from '../storage/kv.js';
 import { t } from '../i18n/index.js';
@@ -226,6 +227,7 @@ export async function handleCommand(
         addedAt: Date.now(),
       });
       await saveUserSubscriptions(kv, chatId, userSubs);
+      await notifyDO(env, chatId, 'sub');
 
       const displayName = defaultAlias || shortenAddress(address);
       const profileUrl = `https://polymarket.com/profile/${address}`;
@@ -254,6 +256,7 @@ export async function handleCommand(
 
       const removed = userSubs.splice(index, 1)[0];
       await saveUserSubscriptions(kv, chatId, userSubs);
+      await notifyDO(env, chatId, 'sub');
 
       return `${t(lang, 'cmd.unsubscribed')}: ${removed.alias || shortenAddress(address)}`;
     }
@@ -288,6 +291,7 @@ export async function handleCommand(
 
       sub.alias = newAlias;
       await saveUserSubscriptions(kv, chatId, userSubs);
+      await notifyDO(env, chatId, 'sub');
       return `${t(lang, 'cmd.aliasUpdated')}: *${escapeMarkdown(newAlias)}*`;
     }
 
@@ -447,6 +451,7 @@ export async function handleCommand(
       }
 
       await setThreshold(kv, chatId, amount);
+      await notifyDO(env, chatId, 'config');
 
       if (amount <= 0) {
         return t(lang, 'threshold.disabled');

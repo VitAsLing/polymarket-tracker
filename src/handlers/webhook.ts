@@ -4,7 +4,7 @@
 
 import { sendTelegram, answerCallbackQuery, editMessageText } from '../api/telegram.js';
 import { handleCommand, getPositionsPage, getPnlPage } from '../commands/index.js';
-import { setLang, getLang, resolveAddressArg } from '../storage/kv.js';
+import { setLang, getLang, resolveAddressArg, notifyDO } from '../storage/kv.js';
 import { t, getLangName } from '../i18n/index.js';
 import type { Env, Lang } from '../types/index.js';
 
@@ -24,7 +24,7 @@ interface TelegramUpdate {
   };
 }
 
-export async function handleWebhook(request: Request, env: Env): Promise<Response> {
+export async function handleWebhook(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
   // Verify Telegram secret token if configured
   if (env.WEBHOOK_SECRET) {
     const token = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
@@ -32,6 +32,8 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
       return new Response('Unauthorized', { status: 401 });
     }
   }
+
+  // Note: ensureDORunning is called in handleRequest for all requests
 
   try {
     const update = await request.json() as TelegramUpdate;
@@ -76,7 +78,7 @@ async function handleCallbackQuery(
   callbackQuery: NonNullable<TelegramUpdate['callback_query']>,
   env: Env
 ): Promise<void> {
-  const { id, from, message, data } = callbackQuery;
+  const { id, message, data } = callbackQuery;
   if (!data || !message) {
     await answerCallbackQuery(env.TG_BOT_TOKEN, id);
     return;
@@ -92,11 +94,12 @@ async function handleCallbackQuery(
     return;
   }
 
-  // Handle language switch
+  // Handle language switch (use chatId, not from.id, to support group chats)
   if (data.startsWith('lang:')) {
     const newLang = data.split(':')[1] as Lang;
     if (newLang === 'en' || newLang === 'zh') {
-      await setLang(kv, from.id, newLang);
+      await setLang(kv, chatId, newLang);
+      await notifyDO(env, chatId, 'config');
       const text = t(newLang, 'lang.switched', { lang: getLangName(newLang) });
       await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, text);
       await answerCallbackQuery(env.TG_BOT_TOKEN, id);

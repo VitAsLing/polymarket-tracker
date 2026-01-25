@@ -2,24 +2,32 @@
  * HTTP request router
  */
 
-import { getAllUserSubscriptions } from '../storage/kv.js';
 import { handleWebhook } from './webhook.js';
-import { checkSubscriptions } from './scheduler.js';
 import type { Env } from '../types/index.js';
 
-export async function handleRequest(request: Request, env: Env): Promise<Response> {
+/**
+ * Ensure DO alarm is running
+ */
+async function ensureDORunning(env: Env): Promise<void> {
+  try {
+    const id = env.SCHEDULER_DO.idFromName('main');
+    const stub = env.SCHEDULER_DO.get(id);
+    await stub.fetch('http://do/ensure');
+  } catch (error) {
+    console.error('[ensureDORunning] Error:', error);
+  }
+}
+
+export async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
 
+  // Ensure DO is running on every request
+  ctx.waitUntil(ensureDORunning(env));
+
   // Telegram Webhook
   if (path === '/webhook' && request.method === 'POST') {
-    return handleWebhook(request, env);
-  }
-
-  // Manual trigger
-  if (path === '/check') {
-    const results = await checkSubscriptions(env);
-    return Response.json(results);
+    return handleWebhook(request, env, ctx);
   }
 
   // Health check
@@ -27,25 +35,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     return Response.json({ status: 'ok', timestamp: Date.now() });
   }
 
-  // View subscriptions (convert Map to object for JSON)
-  if (path === '/subscriptions') {
-    const subsMap = await getAllUserSubscriptions(env.POLYMARKET_KV);
-    const result: Record<string, unknown[]> = {};
-    for (const [chatId, subs] of subsMap) {
-      result[String(chatId)] = subs;
-    }
-    return Response.json(result);
-  }
-
   // Default response
   return Response.json({
     name: 'Polymarket Tracker Bot',
-    version: '2.3.0',
-    endpoints: {
-      'POST /webhook': 'Telegram webhook',
-      'GET /check': 'Manually trigger check',
-      'GET /health': 'Health check',
-      'GET /subscriptions': 'View subscriptions',
-    },
+    version: '2.4.0',
   });
 }

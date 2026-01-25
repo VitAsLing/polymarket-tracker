@@ -8,10 +8,28 @@
  */
 
 import { shortenAddress } from '../utils/format.js';
-import type { ResolvedAddress, Lang } from '../types/index.js';
+import type { ResolvedAddress, Lang, Env } from '../types/index.js';
 
 const DEFAULT_THRESHOLD = 10;
 const LAST_ACTIVITY_TTL = 86400 * 90; // 90 天
+
+// ============ KV 辅助函数 ============
+
+/**
+ * 分页获取所有 KV keys（KV 单次最多返回 1000 个）
+ */
+async function listAllKeys(kv: KVNamespace, prefix: string): Promise<KVNamespaceListKey<unknown>[]> {
+  const keys: KVNamespaceListKey<unknown>[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const result = await kv.list({ prefix, cursor });
+    keys.push(...result.keys);
+    cursor = result.list_complete ? undefined : result.cursor;
+  } while (cursor);
+
+  return keys;
+}
 
 // ============ 订阅相关 ============
 
@@ -42,14 +60,14 @@ export async function saveUserSubscriptions(kv: KVNamespace, chatId: number, sub
 }
 
 /**
- * 获取所有用户订阅（用于 Cron，使用 list API）
+ * 获取所有用户订阅（使用分页遍历所有 keys）
  */
 export async function getAllUserSubscriptions(kv: KVNamespace): Promise<Map<number, SubRecord[]>> {
   const result = new Map<number, SubRecord[]>();
 
-  const list = await kv.list({ prefix: 'sub:' });
+  const keys = await listAllKeys(kv, 'sub:');
 
-  for (const key of list.keys) {
+  for (const key of keys) {
     const chatId = parseInt(key.name.replace('sub:', ''), 10);
     const subs = await kv.get(key.name, { type: 'json' }) as SubRecord[];
     if (subs && subs.length > 0) {
@@ -91,14 +109,14 @@ export async function saveUserConfig(kv: KVNamespace, chatId: number, config: Pa
 }
 
 /**
- * 获取所有用户配置（用于 Cron，使用 list API）
+ * 获取所有用户配置（使用分页遍历所有 keys）
  */
 export async function getAllUserConfigs(kv: KVNamespace): Promise<Map<number, UserConfig>> {
   const result = new Map<number, UserConfig>();
 
-  const list = await kv.list({ prefix: 'config:' });
+  const keys = await listAllKeys(kv, 'config:');
 
-  for (const key of list.keys) {
+  for (const key of keys) {
     const chatId = parseInt(key.name.replace('config:', ''), 10);
     const config = await kv.get(key.name, { type: 'json' }) as UserConfig;
     if (config) {
@@ -209,4 +227,25 @@ export async function resolveAddressArg(
   }
 
   return { address: null, displayName: null };
+}
+
+// ============ Durable Object 通知 ============
+
+type NotifyType = 'sub' | 'config';
+
+/**
+ * 通知 DO 更新缓存
+ */
+export async function notifyDO(env: Env, chatId: number, type: NotifyType): Promise<void> {
+  try {
+    const id = env.SCHEDULER_DO.idFromName('main');
+    const stub = env.SCHEDULER_DO.get(id);
+    await stub.fetch('http://do/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, type }),
+    });
+  } catch (error) {
+    console.error('[notifyDO] Error:', error);
+  }
 }

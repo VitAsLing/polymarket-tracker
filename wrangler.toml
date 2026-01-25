@@ -7,7 +7,16 @@ compatibility_date = "2024-01-01"
 binding = "POLYMARKET_KV"
 id = "ff4b4c68235844ae9175116b2ee7ee21"
 
-# Scheduled task (check every minute)
+# Durable Objects
+[[durable_objects.bindings]]
+name = "SCHEDULER_DO"
+class_name = "SchedulerDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SchedulerDO"]
+
+# Heartbeat: ensure DO alarm is running (every minute)
 [triggers]
 crons = ["* * * * *"]
 
