@@ -13,7 +13,7 @@ import { formatActivityMessage } from '../messages/format.js';
 import type { Env, CheckResult, Lang } from '../types/index.js';
 import type { SubRecord, UserConfig } from '../storage/kv.js';
 
-const CHECK_INTERVAL_MS = 30_000; // 30 seconds
+const CHECK_INTERVAL_MS = 20_000; // 20 seconds
 const API_CONCURRENCY = 10;
 
 // Cache structure
