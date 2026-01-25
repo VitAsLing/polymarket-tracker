@@ -397,18 +397,10 @@ export async function handleCommand(
         const profileUrl = `https://polymarket.com/profile/${address}`;
         let msg = `🏆 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.leaderboard')}\n\n`;
 
-        const getRankEmoji = (rank: number): string => {
-          if (rank <= 100) return '🥇';
-          if (rank <= 1000) return '🥈';
-          if (rank <= 10000) return '🥉';
-          return '🏅';
-        };
-
         const formatRank = (data: LeaderboardEntry[], period: string): string => {
           if (!data || data.length === 0) return `*${period}:* ${t(lang, 'cmd.notRanked')}\n\n`;
           const r = data[0];
-          const emoji = getRankEmoji(r.rank);
-          return `*${period}:* ${emoji} #${r.rank}\n${formatPnL(r.pnl)}\n📊 ${t(lang, 'rank.volume')}: ${formatUSD(r.vol)}\n\n`;
+          return `*${period}:* 🏅 #${r.rank}\n${formatPnL(r.pnl)}\n📊 ${t(lang, 'rank.volume')}: ${formatUSD(r.vol)}\n\n`;
         };
 
         msg += formatRank(dayRank, t(lang, 'cmd.today'));
