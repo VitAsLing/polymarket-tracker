@@ -99,9 +99,9 @@ export async function getPositionsPage(
 
     let statusEmoji = '';
     if (pos.curPrice <= 0.01) {
-      statusEmoji = '❌ ';
+      statusEmoji = '🟥 ';
     } else if (pos.redeemable) {
-      statusEmoji = '✅ ';
+      statusEmoji = '🟩 ';
     }
 
     const marketUrl = pos.eventSlug || pos.slug
@@ -154,7 +154,7 @@ export async function getPnlPage(
     const idx = offset + i + 1;
     const pnl = pos.realizedPnl || 0;
     totalPnl += pnl;
-    const statusEmoji = pnl >= 0 ? '✅ ' : '❌ ';
+    const statusEmoji = pnl >= 0 ? '🟩 ' : '🟥 ';
     const avgPrice = ((pos.avgPrice || 0) * 100).toFixed(1);
     const date = pos.timestamp ? new Date(pos.timestamp * 1000).toISOString().substring(0, 10) : '';
 
@@ -400,7 +400,7 @@ export async function handleCommand(
         const formatRank = (data: LeaderboardEntry[], period: string): string => {
           if (!data || data.length === 0) return `*${period}:* ${t(lang, 'cmd.notRanked')}\n\n`;
           const r = data[0];
-          return `*${period}:* 🏅 #${r.rank}\n${formatPnL(r.pnl)}\n📊 ${t(lang, 'rank.volume')}: ${formatUSD(r.vol)}\n\n`;
+          return `*${period}:* 🏅 #${r.rank}\n${formatPnL(r.pnl)}\n🔥 ${t(lang, 'rank.volume')}: ${formatUSD(r.vol)}\n\n`;
         };
 
         msg += formatRank(dayRank, t(lang, 'cmd.today'));
