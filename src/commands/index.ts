@@ -100,9 +100,9 @@ export async function getPositionsPage(
 
     let statusEmoji = '';
     if (pos.curPrice <= 0.01) {
-      statusEmoji = '🟥 ';
+      statusEmoji = '❌ ';
     } else if (pos.curPrice >= 0.99 || pos.redeemable) {
-      statusEmoji = '🟩 ';
+      statusEmoji = '✅ ';
     } else if (pos.curPrice > pos.avgPrice) {
       statusEmoji = '🔼 ';
     } else if (pos.curPrice < pos.avgPrice) {
@@ -159,7 +159,7 @@ export async function getPnlPage(
     const idx = offset + i + 1;
     const pnl = pos.realizedPnl || 0;
     totalPnl += pnl;
-    const statusEmoji = pnl >= 0 ? '🟩 ' : '🟥 ';
+    const statusEmoji = pnl >= 0 ? '✅ ' : '❌ ';
     const avgPrice = ((pos.avgPrice || 0) * 100).toFixed(1);
     const date = pos.timestamp ? new Date(pos.timestamp * 1000).toISOString().substring(0, 10) : '';
 
