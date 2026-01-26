@@ -17,6 +17,6 @@
     "@typescript-eslint/parser": "^8.53.1",
     "eslint": "^9.39.2",
     "typescript": "^5.9.3",
-    "wrangler": "^3.0.0"
+    "wrangler": "4"
   }
 }
