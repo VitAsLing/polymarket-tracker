@@ -41,9 +41,15 @@ export async function saveUserSubscriptions(kv: KVNamespace, chatId: number, sub
 
 // ============ 用户配置相关 ============
 
+export interface CategoryFilter {
+  mode: 'include' | 'exclude';
+  categories: string[];
+}
+
 export interface UserConfig {
   lang: Lang;
   threshold: number;
+  filter?: CategoryFilter;
 }
 
 /**
@@ -65,7 +71,12 @@ export async function saveUserConfig(kv: KVNamespace, chatId: number, config: Pa
   const updated: UserConfig = {
     lang: config.lang ?? current.lang,
     threshold: config.threshold ?? current.threshold,
+    filter: config.filter !== undefined ? config.filter : current.filter,
   };
+  // 如果 filter 为 null，删除该字段
+  if (updated.filter === null) {
+    delete updated.filter;
+  }
   await kv.put(`config:${chatId}`, JSON.stringify(updated));
 }
 
@@ -97,6 +108,21 @@ export async function getThreshold(kv: KVNamespace, chatId: number): Promise<num
  */
 export async function setThreshold(kv: KVNamespace, chatId: number, amount: number): Promise<void> {
   await saveUserConfig(kv, chatId, { threshold: amount });
+}
+
+/**
+ * 获取用户过滤器
+ */
+export async function getFilter(kv: KVNamespace, chatId: number): Promise<CategoryFilter | undefined> {
+  const config = await getUserConfig(kv, chatId);
+  return config.filter;
+}
+
+/**
+ * 设置用户过滤器
+ */
+export async function setFilter(kv: KVNamespace, chatId: number, filter: CategoryFilter | null): Promise<void> {
+  await saveUserConfig(kv, chatId, { filter: filter as CategoryFilter | undefined });
 }
 
 // ============ 地址解析 ============

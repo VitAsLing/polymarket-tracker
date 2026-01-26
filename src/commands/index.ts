@@ -17,6 +17,8 @@ import {
   getLang,
   getThreshold,
   setThreshold,
+  getFilter,
+  setFilter,
   notifyDO,
   type SubRecord,
 } from '../storage/kv.js';
@@ -457,6 +459,54 @@ export async function handleCommand(
         return t(lang, 'threshold.disabled');
       }
       return t(lang, 'threshold.set').replace('{amount}', amount.toString());
+    }
+
+    case '/ft': {
+      const currentFilter = await getFilter(kv, chatId);
+
+      // 无参数：显示当前设置
+      if (!args[0]) {
+        if (!currentFilter || !currentFilter.categories.length) {
+          return t(lang, 'filter.none');
+        }
+        return t(lang, 'filter.current')
+          .replace('{mode}', t(lang, `filter.${currentFilter.mode}`))
+          .replace('{categories}', currentFilter.categories.join(', '));
+      }
+
+      // off: 关闭过滤
+      if (args[0].toLowerCase() === 'off') {
+        await setFilter(kv, chatId, null);
+        await notifyDO(env, chatId, 'config');
+        return t(lang, 'filter.disabled');
+      }
+
+      // 解析 +/- 开头的分类
+      const input = args.join(' ');
+      const firstChar = input.charAt(0);
+
+      if (firstChar !== '+' && firstChar !== '-') {
+        return t(lang, 'filter.invalidUsage');
+      }
+
+      const mode = firstChar === '+' ? 'include' : 'exclude';
+      // 去掉开头的 +/- 并按逗号或空格分隔
+      const categoriesStr = input.slice(1).trim();
+      const categories = categoriesStr
+        .split(/[,\s]+/)
+        .map(c => c.toLowerCase().trim())
+        .filter(c => c.length > 0);
+
+      if (categories.length === 0) {
+        return t(lang, 'filter.invalidUsage');
+      }
+
+      await setFilter(kv, chatId, { mode, categories });
+      await notifyDO(env, chatId, 'config');
+
+      return t(lang, 'filter.set')
+        .replace('{mode}', t(lang, `filter.${mode}`))
+        .replace('{categories}', categories.join(', '));
     }
 
     default:

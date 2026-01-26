@@ -37,6 +37,7 @@ export const en = {
 
 *Settings:*
 /th [amount] - Min trade amount to push (default $10)
+/ft [+/-categories] - Filter by category
 /lang - Switch language
 
 _Address format: 0x..._`,
@@ -113,6 +114,17 @@ _Address format: 0x..._`,
     none: '💰 Threshold disabled (all trades pushed)',
     set: '✅ Threshold set to {amount}',
     disabled: '✅ Threshold disabled (all trades pushed)',
+  },
+
+  // Filter
+  filter: {
+    current: '🔍 *Current filter:*\nMode: {mode}\nCategories: {categories}',
+    none: '🔍 No filter set (all categories pushed)\n\nUsage:\n/ft +nba,epl - Only push these\n/ft -lol,atp - Skip these\n/ft off - Disable filter',
+    set: '✅ Filter set: {mode} {categories}',
+    disabled: '✅ Filter disabled (all categories pushed)',
+    invalidUsage: '❌ Invalid usage\n\nExamples:\n/ft +nba,epl - Only push these\n/ft -lol,atp - Skip these\n/ft off - Disable filter',
+    include: 'include',
+    exclude: 'exclude',
   },
 
   // Pagination

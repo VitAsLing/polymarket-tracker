@@ -11,7 +11,7 @@ import { getUserActivity } from '../api/polymarket.js';
 import { sendTelegram } from '../api/telegram.js';
 import { formatActivityMessage } from '../messages/format.js';
 import type { Env, CheckResult, Lang } from '../types/index.js';
-import type { SubRecord, UserConfig } from '../storage/kv.js';
+import type { SubRecord, UserConfig, CategoryFilter } from '../storage/kv.js';
 
 const CHECK_INTERVAL_MS = 20_000; // 20 seconds
 const API_CONCURRENCY = 10;
@@ -250,7 +250,7 @@ export class SchedulerDO extends DurableObject<Env> {
         newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
         const shortAddr = shortenAddress(address);
-        const subInfoMap = new Map<number, { displayName: string; lang: Lang; addedAtSec: number; threshold: number }>();
+        const subInfoMap = new Map<number, { displayName: string; lang: Lang; addedAtSec: number; threshold: number; filter?: CategoryFilter }>();
         for (const sub of subs) {
           if (!subInfoMap.has(sub.chatId)) {
             const userConfig = this.cache.userConfigs.get(sub.chatId) || defaultConfig;
@@ -259,6 +259,7 @@ export class SchedulerDO extends DurableObject<Env> {
               lang: userConfig.lang,
               addedAtSec: sub.addedAt ? Math.floor(sub.addedAt / 1000) : 0,
               threshold: userConfig.threshold,
+              filter: userConfig.filter,
             });
           }
         }
@@ -270,6 +271,14 @@ export class SchedulerDO extends DurableObject<Env> {
             if (activity.type !== 'TRADE') continue;
             if (activity.timestamp <= subInfo.addedAtSec) continue;
             if (subInfo.threshold > 0 && activity.usdcSize < subInfo.threshold) continue;
+
+            // Filter by category (slug prefix)
+            if (subInfo.filter && subInfo.filter.categories.length > 0) {
+              const slugPrefix = activity.slug?.split('-')[0]?.toLowerCase() || '';
+              const matched = subInfo.filter.categories.includes(slugPrefix);
+              if (subInfo.filter.mode === 'include' && !matched) continue;
+              if (subInfo.filter.mode === 'exclude' && matched) continue;
+            }
 
             const { displayName, lang } = subInfo;
             const message = formatActivityMessage(activity, displayName, address, lang);
