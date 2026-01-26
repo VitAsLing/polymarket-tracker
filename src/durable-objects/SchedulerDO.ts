@@ -92,9 +92,8 @@ export class SchedulerDO extends DurableObject<Env> {
         const body = await request.json() as NotifyRequest;
         await this.refreshUserCache(body.chatId, body.type);
         return Response.json({ success: true });
-      } catch (error) {
-        console.error('[SchedulerDO] Notify error:', error);
-        return Response.json({ success: false, error: String(error) }, { status: 500 });
+      } catch {
+        return Response.json({ success: false }, { status: 500 });
       }
     }
 
@@ -301,8 +300,8 @@ export class SchedulerDO extends DurableObject<Env> {
         if (maxTimestamp > lastActivity) {
           allLastActivities[address] = maxTimestamp;
         }
-      } catch (error) {
-        console.error(`[SchedulerDO] Error checking ${address}:`, error);
+      } catch {
+        // Ignore single address errors
       }
     };
 
@@ -354,9 +353,12 @@ export class SchedulerDO extends DurableObject<Env> {
     await this.ctx.storage.put('lastActivities', allLastActivities);
     const storageWriteTime = Date.now() - storageWriteStart;
 
-    const totalTime = Date.now() - checkStartTime;
-    // eslint-disable-next-line no-console
-    console.log(`[SchedulerDO] Poll completed: ${totalTime}ms total | storage_read: ${storageReadTime}ms | api(${addressMap.size} addrs): ${apiTime}ms | telegram(${totalNotified} msgs): ${telegramTime}ms | storage_write: ${storageWriteTime}ms`);
+    // Only log when there are notifications sent
+    if (totalNotified > 0) {
+      const totalTime = Date.now() - checkStartTime;
+      // eslint-disable-next-line no-console
+      console.log(`[SchedulerDO] Poll completed: ${totalTime}ms total | storage_read: ${storageReadTime}ms | api(${addressMap.size} addrs): ${apiTime}ms | telegram(${totalNotified} msgs): ${telegramTime}ms | storage_write: ${storageWriteTime}ms`);
+    }
 
     return { total: totalSubs, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
   }

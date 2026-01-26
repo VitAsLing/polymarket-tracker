@@ -184,7 +184,7 @@ export async function notifyDO(env: Env, chatId: number, type: NotifyType): Prom
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chatId, type }),
     });
-  } catch (error) {
-    console.error('[notifyDO] Error:', error);
+  } catch {
+    // Ignore - DO will sync on next alarm
   }
 }

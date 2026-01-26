@@ -127,8 +127,8 @@ async function handleCallbackQuery(
       await editMessageText(env.TG_BOT_TOKEN, chatId, messageId, response.text, {
         reply_markup: response.reply_markup,
       });
-    } catch (e) {
-      console.error(`Error getting ${action} page:`, e);
+    } catch {
+      // Ignore pagination errors
     }
     return;
   }

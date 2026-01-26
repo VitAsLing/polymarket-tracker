@@ -7,14 +7,14 @@ Track Polymarket users via Telegram Bot. Auto-push trading activities (BUY/SELL)
 - **Runtime**: Cloudflare Workers + Durable Objects
 - **Language**: TypeScript
 - **Storage**: Cloudflare KV + DO Storage
-- **Scheduling**: DO Alarm (20s interval)
+- **Scheduling**: DO Alarm (configurable, default 10s)
 - **Bot**: Telegram Bot API (Webhook)
 - **Data**: Polymarket Data API
 
 ## Features
 
 - Subscribe to any Polymarket address (max 20 per user)
-- Near real-time push notifications (20s polling)
+- Near real-time push notifications (10s polling, configurable)
 - Query positions, PnL, portfolio value, leaderboard (with pagination)
 - Multi-user support (isolated per chatId)
 - Multi-language support (English/中文)

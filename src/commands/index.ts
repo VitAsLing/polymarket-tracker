@@ -218,8 +218,8 @@ export async function handleCommand(
           if (activities.length > 0 && activities[0].name) {
             defaultAlias = activities[0].name;
           }
-        } catch (e) {
-          console.error('Failed to get name:', e);
+        } catch {
+          // Ignore - will use short address as fallback
         }
       }
 
@@ -317,8 +317,7 @@ export async function handleCommand(
 
       try {
         return await getPositionsPage(address, displayName!, 0, lang);
-      } catch (e) {
-        console.error('Error getting positions:', e);
+      } catch {
         return t(lang, 'error.failedPositions');
       }
     }
@@ -343,8 +342,7 @@ export async function handleCommand(
 
       try {
         return await getPnlPage(address, displayName!, 0, lang);
-      } catch (e) {
-        console.error('Error getting closed positions:', e);
+      } catch {
         return t(lang, 'error.failedPnl');
       }
     }
@@ -372,8 +370,7 @@ export async function handleCommand(
         const value = formatUSD(result.value);
         const profileUrl = `https://polymarket.com/profile/${address}`;
         return `💵 [${escapeMarkdown(displayName!)}](${profileUrl}) ${t(lang, 'cmd.portfolioValue')}\n\n*${value}* ${getMagnitude(result.value)}`;
-      } catch (e) {
-        console.error('Error getting value:', e);
+      } catch {
         return t(lang, 'error.failedValue');
       }
     }
@@ -419,8 +416,7 @@ export async function handleCommand(
         msg += formatRank(allRank, t(lang, 'cmd.allTime'));
 
         return msg;
-      } catch (e) {
-        console.error('Error getting rank:', e);
+      } catch {
         return t(lang, 'error.failedRank');
       }
     }
