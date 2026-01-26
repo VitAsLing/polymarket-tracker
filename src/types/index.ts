@@ -17,6 +17,7 @@ export interface Env {
   TG_BOT_TOKEN: string;
   WEBHOOK_SECRET?: string; // Optional: Telegram webhook secret token
   SCHEDULER_DO: DurableObjectNamespace; // Durable Object for scheduling
+  CHECK_INTERVAL_MS?: string; // Polling interval in milliseconds (default: 10000)
 }
 
 // Subscription data structure

@@ -23,9 +23,13 @@ crons = ["* * * * *"]
 # Telegram config (set via secret)
 # bunx wrangler secret put TG_BOT_TOKEN
 
-# Logging (disable to save quota)
-# [observability]
-# enabled = true
-# [observability.logs]
-# enabled = true
-# invocation_logs = true
+# Environment variables
+[vars]
+CHECK_INTERVAL_MS = 10000  # Polling interval in milliseconds (default: 10s)
+
+# Logging
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
+invocation_logs = true

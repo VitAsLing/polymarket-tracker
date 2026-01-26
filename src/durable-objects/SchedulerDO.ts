@@ -13,7 +13,7 @@ import { formatActivityMessage } from '../messages/format.js';
 import type { Env, CheckResult, Lang } from '../types/index.js';
 import type { SubRecord, UserConfig, CategoryFilter } from '../storage/kv.js';
 
-const CHECK_INTERVAL_MS = 20_000; // 20 seconds
+const DEFAULT_CHECK_INTERVAL_MS = 10_000; // 10 seconds
 const API_CONCURRENCY = 10;
 
 // Cache structure
@@ -54,8 +54,13 @@ export class SchedulerDO extends DurableObject<Env> {
     super(ctx, env);
   }
 
+  private get checkIntervalMs(): number {
+    return parseInt(this.env.CHECK_INTERVAL_MS || '', 10) || DEFAULT_CHECK_INTERVAL_MS;
+  }
+
   async alarm(): Promise<void> {
     const startTime = Date.now();
+    const intervalMs = this.checkIntervalMs;
 
     try {
       // Initialize cache on first run
@@ -68,12 +73,12 @@ export class SchedulerDO extends DurableObject<Env> {
 
       // Schedule next alarm
       const elapsed = Date.now() - startTime;
-      const nextDelay = Math.max(CHECK_INTERVAL_MS - elapsed, 1000);
+      const nextDelay = Math.max(intervalMs - elapsed, 1000);
       await this.ctx.storage.setAlarm(Date.now() + nextDelay);
     } catch (error) {
       console.error('[SchedulerDO] Alarm error:', error);
       // Still schedule next alarm on error
-      await this.ctx.storage.setAlarm(Date.now() + CHECK_INTERVAL_MS);
+      await this.ctx.storage.setAlarm(Date.now() + intervalMs);
     }
   }
 
@@ -189,6 +194,7 @@ export class SchedulerDO extends DurableObject<Env> {
    * Check subscriptions and send notifications
    */
   private async checkSubscriptions(): Promise<CheckResult> {
+    const checkStartTime = Date.now();
     const botToken = this.env.TG_BOT_TOKEN;
 
     if (this.cache.userSubscriptions.size === 0) {
@@ -216,7 +222,9 @@ export class SchedulerDO extends DurableObject<Env> {
     const validAddresses = new Set(addressMap.keys());
 
     // Load lastActivities from DO storage
+    const storageReadStart = Date.now();
     const allLastActivities = await this.ctx.storage.get<Record<string, number>>('lastActivities') || {};
+    const storageReadTime = Date.now() - storageReadStart;
 
     // Default config
     const defaultConfig: UserConfig = { lang: 'en', threshold: 10 };
@@ -316,21 +324,26 @@ export class SchedulerDO extends DurableObject<Env> {
     };
 
     // Process all addresses
+    const apiStartTime = Date.now();
     const addressEntries = Array.from(addressMap.entries());
     await parallelLimit(addressEntries, processAddress, API_CONCURRENCY);
+    const apiTime = Date.now() - apiStartTime;
 
     // Sort messages by timestamp
     pendingMessages.sort((a, b) => a.timestamp - b.timestamp);
 
     // Send messages
+    const telegramStartTime = Date.now();
     let totalNotified = 0;
     for (const { chatId, message } of pendingMessages) {
       const sent = await sendTelegram(botToken, chatId, message);
       if (sent) totalNotified++;
       await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
     }
+    const telegramTime = Date.now() - telegramStartTime;
 
     // Save lastActivities and clean orphans
+    const storageWriteStart = Date.now();
     const now = Math.floor(Date.now() / 1000);
     const TTL = 86400 * 90; // 90 days
     for (const addr of Object.keys(allLastActivities)) {
@@ -339,6 +352,11 @@ export class SchedulerDO extends DurableObject<Env> {
       }
     }
     await this.ctx.storage.put('lastActivities', allLastActivities);
+    const storageWriteTime = Date.now() - storageWriteStart;
+
+    const totalTime = Date.now() - checkStartTime;
+    // eslint-disable-next-line no-console
+    console.log(`[SchedulerDO] Poll completed: ${totalTime}ms total | storage_read: ${storageReadTime}ms | api(${addressMap.size} addrs): ${apiTime}ms | telegram(${totalNotified} msgs): ${telegramTime}ms | storage_write: ${storageWriteTime}ms`);
 
     return { total: totalSubs, addresses: addressMap.size, processed: totalProcessed, notified: totalNotified };
   }
