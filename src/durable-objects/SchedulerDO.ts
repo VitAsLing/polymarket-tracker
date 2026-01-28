@@ -33,6 +33,8 @@ interface PendingMessage {
   chatId: number;
   message: string;
   timestamp: number;
+  address: string;
+  txHash: string;
 }
 
 // Notify request types
@@ -220,9 +222,14 @@ export class SchedulerDO extends DurableObject<Env> {
 
     const validAddresses = new Set(addressMap.keys());
 
-    // Load lastActivities from DO storage
+    // Load lastActivities and sentTxHashes from DO storage
     const storageReadStart = Date.now();
-    const allLastActivities = await this.ctx.storage.get<Record<string, number>>('lastActivities') || {};
+    const [allLastActivities, sentTxHashes] = await Promise.all([
+      this.ctx.storage.get<Record<string, number>>('lastActivities'),
+      this.ctx.storage.get<string[]>('sentTxHashes'),
+    ]);
+    const lastActivities = allLastActivities || {};
+    const sentSet = new Set(sentTxHashes || []);
     const storageReadTime = Date.now() - storageReadStart;
 
     // Default config
@@ -236,22 +243,30 @@ export class SchedulerDO extends DurableObject<Env> {
     const processAddress = async (entry: [string, SubWithChat[]]): Promise<void> => {
       const [address, subs] = entry;
       try {
-        const lastActivity = allLastActivities[address] || 0;
+        const lastActivity = lastActivities[address] || 0;
 
-        // Calculate API start time
-        let apiStart = lastActivity;
+        // Calculate API start time (use >= by subtracting 1 second)
+        let apiStart = lastActivity > 0 ? lastActivity - 1 : 0;
         if (apiStart === 0) {
           const validAddedAts = subs.filter(s => s.addedAt).map(s => Math.floor(s.addedAt / 1000));
           if (validAddedAts.length > 0) {
             apiStart = Math.min(...validAddedAts);
           } else {
-            allLastActivities[address] = Math.floor(Date.now() / 1000);
+            lastActivities[address] = Math.floor(Date.now() / 1000);
             return;
           }
         }
 
         const activities = await getUserActivity(address, { start: apiStart });
-        const newActivities = activities.filter((a) => a.timestamp > lastActivity);
+        // Filter: timestamp >= lastActivity AND not already sent (by txHash)
+        // If no txHash, fall back to timestamp > lastActivity
+        const newActivities = activities.filter((a) => {
+          if (a.transactionHash) {
+            return a.timestamp >= lastActivity && !sentSet.has(a.transactionHash);
+          }
+          // No txHash: use strict > to avoid duplicates
+          return a.timestamp > lastActivity;
+        });
         if (newActivities.length === 0) return;
 
         newActivities.sort((a, b) => a.timestamp - b.timestamp);
@@ -271,8 +286,6 @@ export class SchedulerDO extends DurableObject<Env> {
           }
         }
 
-        let maxTimestamp = lastActivity;
-
         for (const activity of newActivities) {
           for (const [chatId, subInfo] of subInfoMap) {
             if (activity.type !== 'TRADE') continue;
@@ -290,15 +303,16 @@ export class SchedulerDO extends DurableObject<Env> {
             const { displayName, lang } = subInfo;
             const message = formatActivityMessage(activity, displayName, address, lang);
             if (message) {
-              pendingMessages.push({ chatId, message, timestamp: activity.timestamp });
+              pendingMessages.push({
+                chatId,
+                message,
+                timestamp: activity.timestamp,
+                address,
+                txHash: activity.transactionHash || '',
+              });
             }
           }
-          maxTimestamp = Math.max(maxTimestamp, activity.timestamp);
           totalProcessed++;
-        }
-
-        if (maxTimestamp > lastActivity) {
-          allLastActivities[address] = maxTimestamp;
         }
       } catch {
         // Ignore single address errors
@@ -331,26 +345,72 @@ export class SchedulerDO extends DurableObject<Env> {
     // Sort messages by timestamp
     pendingMessages.sort((a, b) => a.timestamp - b.timestamp);
 
-    // Send messages
+    // Group messages by chatId + address for merging
+    const groupKey = (m: PendingMessage) => `${m.chatId}:${m.address}`;
+    const messageGroups = new Map<string, PendingMessage[]>();
+    for (const msg of pendingMessages) {
+      const key = groupKey(msg);
+      if (!messageGroups.has(key)) {
+        messageGroups.set(key, []);
+      }
+      messageGroups.get(key)!.push(msg);
+    }
+
+    // Merge and send messages
+    const SEPARATOR = '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+    const MAX_ACTIVITIES_PER_MSG = 3;
     const telegramStartTime = Date.now();
     let totalNotified = 0;
-    for (const { chatId, message } of pendingMessages) {
-      const sent = await sendTelegram(botToken, chatId, message);
-      if (sent) totalNotified++;
-      await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
+    const newSentTxHashes: string[] = [];
+
+    for (const [, group] of messageGroups) {
+      // Split into batches of MAX_ACTIVITIES_PER_MSG
+      for (let i = 0; i < group.length; i += MAX_ACTIVITIES_PER_MSG) {
+        const batch = group.slice(i, i + MAX_ACTIVITIES_PER_MSG);
+        const mergedMessage = batch.map(m => m.message).join(SEPARATOR);
+        const chatId = batch[0].chatId;
+        const address = batch[0].address;
+
+        const sent = await sendTelegram(botToken, chatId, mergedMessage);
+        if (sent) {
+          totalNotified++;
+          // Record all txHashes in batch
+          for (const m of batch) {
+            if (m.txHash) {
+              newSentTxHashes.push(m.txHash);
+            }
+          }
+          // Update lastActivity to max timestamp in batch
+          const maxTimestamp = Math.max(...batch.map(m => m.timestamp));
+          const currentLast = lastActivities[address] || 0;
+          if (maxTimestamp > currentLast) {
+            lastActivities[address] = maxTimestamp;
+          }
+        }
+        await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
+      }
     }
     const telegramTime = Date.now() - telegramStartTime;
 
-    // Save lastActivities and clean orphans
+    // Save lastActivities and sentTxHashes
     const storageWriteStart = Date.now();
     const now = Math.floor(Date.now() / 1000);
     const TTL = 86400 * 90; // 90 days
-    for (const addr of Object.keys(allLastActivities)) {
-      if (!validAddresses.has(addr) && now - allLastActivities[addr] > TTL) {
-        delete allLastActivities[addr];
+
+    // Clean orphan addresses
+    for (const addr of Object.keys(lastActivities)) {
+      if (!validAddresses.has(addr) && now - lastActivities[addr] > TTL) {
+        delete lastActivities[addr];
       }
     }
-    await this.ctx.storage.put('lastActivities', allLastActivities);
+
+    // Merge and limit sentTxHashes (keep last 1000 to prevent unbounded growth)
+    const allSentTxHashes = [...sentSet, ...newSentTxHashes].slice(-1000);
+
+    await Promise.all([
+      this.ctx.storage.put('lastActivities', lastActivities),
+      this.ctx.storage.put('sentTxHashes', allSentTxHashes),
+    ]);
     const storageWriteTime = Date.now() - storageWriteStart;
 
     // Only log when there are notifications sent
