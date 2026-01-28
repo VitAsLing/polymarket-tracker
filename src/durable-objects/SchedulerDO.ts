@@ -357,8 +357,8 @@ export class SchedulerDO extends DurableObject<Env> {
     }
 
     // Merge and send messages
-    const SEPARATOR = '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    const MAX_ACTIVITIES_PER_MSG = 3;
+    const SEPARATOR = '\n\n\n\n';
+    const MAX_ACTIVITIES_PER_MSG = 5;
     const telegramStartTime = Date.now();
     let totalNotified = 0;
     const newSentTxHashes: string[] = [];
