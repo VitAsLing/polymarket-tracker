@@ -259,12 +259,12 @@ export class SchedulerDO extends DurableObject<Env> {
 
         const activities = await getUserActivity(address, { start: apiStart });
         // Filter: timestamp >= lastActivity AND not already sent (by txHash)
-        // If no txHash, fall back to timestamp > lastActivity
+        // If no txHash or sentSet is empty, fall back to timestamp > lastActivity
         const newActivities = activities.filter((a) => {
-          if (a.transactionHash) {
+          if (a.transactionHash && sentSet.size > 0) {
             return a.timestamp >= lastActivity && !sentSet.has(a.transactionHash);
           }
-          // No txHash: use strict > to avoid duplicates
+          // No txHash or first run: use strict > to avoid duplicates
           return a.timestamp > lastActivity;
         });
         if (newActivities.length === 0) return;
