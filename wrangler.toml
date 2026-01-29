@@ -25,7 +25,7 @@ crons = ["* * * * *"]
 
 # Environment variables
 [vars]
-CHECK_INTERVAL_MS = 10000  # Polling interval in milliseconds (default: 10s)
+CHECK_INTERVAL_MS = 20000  # Polling interval in milliseconds (default: 20s)
 
 # Logging
 [observability]

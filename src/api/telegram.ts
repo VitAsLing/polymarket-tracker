@@ -34,8 +34,7 @@ export async function sendTelegram(
 
   const result = await response.json() as TelegramResponse;
   if (!result.ok) {
-    const preview = text.slice(0, 50).replace(/\n/g, ' ');
-    console.error(`[Telegram] Failed chatId=${chatId}: ${result.description} | msg: ${preview}...`);
+    console.error('Telegram error:', result.description);
     return false;
   }
   return true;
