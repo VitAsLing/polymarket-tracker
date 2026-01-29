@@ -20,6 +20,8 @@ const API_CONCURRENCY = 10;
 interface Cache {
   userSubscriptions: Map<number, SubRecord[]>;
   userConfigs: Map<number, UserConfig>;
+  lastActivities: Record<string, number>;
+  sentTxHashes: Set<string>;
   initialized: boolean;
 }
 
@@ -49,6 +51,8 @@ export class SchedulerDO extends DurableObject<Env> {
   private cache: Cache = {
     userSubscriptions: new Map(),
     userConfigs: new Map(),
+    lastActivities: {},
+    sentTxHashes: new Set(),
     initialized: false,
   };
 
@@ -156,13 +160,26 @@ export class SchedulerDO extends DurableObject<Env> {
       }
     }
 
+    // Load lastActivities and sentTxHashes from DO storage into cache
+    const [existingLastActivities, existingSentTxHashes] = await Promise.all([
+      this.ctx.storage.get<Record<string, number>>('lastActivities'),
+      this.ctx.storage.get<string[]>('sentTxHashes'),
+    ]);
+
     // Migrate lastActivities from KV to DO storage if not exists
-    const existingLastActivities = await this.ctx.storage.get<Record<string, number>>('lastActivities');
     if (!existingLastActivities) {
       const kvLastActivities = await kv.get('last_activities', { type: 'json' }) as Record<string, number>;
       if (kvLastActivities) {
+        this.cache.lastActivities = kvLastActivities;
         await this.ctx.storage.put('lastActivities', kvLastActivities);
       }
+    } else {
+      this.cache.lastActivities = existingLastActivities;
+    }
+
+    // Load sentTxHashes into cache
+    if (existingSentTxHashes) {
+      this.cache.sentTxHashes = new Set(existingSentTxHashes);
     }
 
     this.cache.initialized = true;
@@ -222,14 +239,10 @@ export class SchedulerDO extends DurableObject<Env> {
 
     const validAddresses = new Set(addressMap.keys());
 
-    // Load lastActivities and sentTxHashes from DO storage
+    // Use cached lastActivities and sentTxHashes (already loaded in initializeFromKV)
     const storageReadStart = Date.now();
-    const [allLastActivities, sentTxHashes] = await Promise.all([
-      this.ctx.storage.get<Record<string, number>>('lastActivities'),
-      this.ctx.storage.get<string[]>('sentTxHashes'),
-    ]);
-    const lastActivities = allLastActivities || {};
-    const sentSet = new Set(sentTxHashes || []);
+    const lastActivities = this.cache.lastActivities;
+    const sentSet = this.cache.sentTxHashes;
     const storageReadTime = Date.now() - storageReadStart;
 
     // Default config
@@ -258,16 +271,38 @@ export class SchedulerDO extends DurableObject<Env> {
         }
 
         const activities = await getUserActivity(address, { start: apiStart });
-        // Filter: timestamp >= lastActivity AND not already sent (by txHash)
-        // If no txHash or sentSet is empty, fall back to timestamp > lastActivity
-        const newActivities = activities.filter((a) => {
-          if (a.transactionHash && sentSet.size > 0) {
-            return a.timestamp >= lastActivity && !sentSet.has(a.transactionHash);
+        // Filter new activities:
+        // 1. Primary: timestamp > lastActivity (strict greater than)
+        // 2. Secondary: if timestamp == lastActivity AND sentSet has data, check txHash
+        const filteredActivities = activities.filter((a) => {
+          // Strictly newer than last activity - always include
+          if (a.timestamp > lastActivity) {
+            // But skip if txHash already sent (handles edge cases)
+            if (a.transactionHash && sentSet.has(a.transactionHash)) {
+              return false;
+            }
+            return true;
           }
-          // No txHash or first run: use strict > to avoid duplicates
-          return a.timestamp > lastActivity;
+          // Same timestamp as last activity - only include if:
+          // 1. sentSet has data (not first run or after data loss)
+          // 2. txHash exists and not already sent
+          // This handles multiple transactions in the same second
+          if (a.timestamp === lastActivity && sentSet.size > 0 && a.transactionHash) {
+            return !sentSet.has(a.transactionHash);
+          }
+          // Older than last activity or can't verify - skip
+          return false;
         });
-        if (newActivities.length === 0) return;
+        if (filteredActivities.length === 0) return;
+
+        // Deduplicate by txHash (API may return duplicate records)
+        const seenTxHashes = new Set<string>();
+        const newActivities = filteredActivities.filter((a) => {
+          if (!a.transactionHash) return true;
+          if (seenTxHashes.has(a.transactionHash)) return false;
+          seenTxHashes.add(a.transactionHash);
+          return true;
+        });
 
         newActivities.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -361,7 +396,6 @@ export class SchedulerDO extends DurableObject<Env> {
     const MAX_ACTIVITIES_PER_MSG = 5;
     const telegramStartTime = Date.now();
     let totalNotified = 0;
-    const newSentTxHashes: string[] = [];
 
     for (const [, group] of messageGroups) {
       // Split into batches of MAX_ACTIVITIES_PER_MSG
@@ -374,10 +408,10 @@ export class SchedulerDO extends DurableObject<Env> {
         const sent = await sendTelegram(botToken, chatId, mergedMessage);
         if (sent) {
           totalNotified++;
-          // Record all txHashes in batch
+          // Record all txHashes in batch - update cache immediately to prevent duplicates
           for (const m of batch) {
             if (m.txHash) {
-              newSentTxHashes.push(m.txHash);
+              this.cache.sentTxHashes.add(m.txHash);
             }
           }
           // Update lastActivity to max timestamp in batch
@@ -404,9 +438,11 @@ export class SchedulerDO extends DurableObject<Env> {
       }
     }
 
-    // Merge and limit sentTxHashes (keep last 1000 to prevent unbounded growth)
-    const allSentTxHashes = [...sentSet, ...newSentTxHashes].slice(-1000);
+    // Limit sentTxHashes (keep last 1000 to prevent unbounded growth)
+    const allSentTxHashes = [...this.cache.sentTxHashes].slice(-1000);
+    this.cache.sentTxHashes = new Set(allSentTxHashes);
 
+    // Persist to storage (cache is already updated)
     await Promise.all([
       this.ctx.storage.put('lastActivities', lastActivities),
       this.ctx.storage.put('sentTxHashes', allSentTxHashes),
