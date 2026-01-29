@@ -420,6 +420,8 @@ export class SchedulerDO extends DurableObject<Env> {
           if (maxTimestamp > currentLast) {
             lastActivities[address] = maxTimestamp;
           }
+          // Persist immediately after each successful send to prevent duplicates on DO eviction
+          await this.ctx.storage.put('lastActivities', lastActivities);
         }
         await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
       }
